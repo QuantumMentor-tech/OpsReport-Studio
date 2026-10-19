@@ -1,0 +1,309 @@
+{
+  "executedAt": "2026-10-19T06:40:31.936Z",
+  "nodeVersion": "v26.8.1",
+  "platform": "win32",
+  "arch": "x64",
+  "totalTests": 18,
+  "passed": 18,
+  "failed": 0,
+  "benchmarks": {
+    "runs": 20,
+    "excel": {
+      "coldMs": 8.49,
+      "medianMs": 10.94,
+      "timesMs": [
+        8.5,
+        11,
+        11,
+        10,
+        12.2,
+        10.3,
+        12.3,
+        13.4,
+        14,
+        11.2,
+        10.9,
+        12.6,
+        10.4,
+        10.6,
+        9.1,
+        8.2,
+        12.3,
+        16.2,
+        8.7,
+        9.8
+      ]
+    },
+    "word": {
+      "coldMs": 3.49,
+      "medianMs": 3.54,
+      "timesMs": [
+        3.5,
+        4.2,
+        3.1,
+        3.6,
+        5.1,
+        3.3,
+        4.2,
+        4.1,
+        4,
+        2.9,
+        2.8,
+        3.7,
+        3.5,
+        3.3,
+        6.2,
+        3.2,
+        3.8,
+        3.4,
+        4.5,
+        3.4
+      ]
+    }
+  },
+  "results": [
+    {
+      "testId": "POC-XLS-01",
+      "name": "Open Copy & Inject Scalar Metadata",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 92.26,
+      "heapDeltaBytes": 2050784,
+      "details": {
+        "masterImmutable": true,
+        "c4": "2026-10-19",
+        "c5": "Officer Jane Doe (Badge #4092)",
+        "c6": "Night Shift Bravo",
+        "outputSizeBytes": 7635
+      }
+    },
+    {
+      "testId": "POC-XLS-02",
+      "name": "Multi-Row Sequential Station Injection",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 19.81,
+      "heapDeltaBytes": 3246408,
+      "details": {
+        "masterImmutable": true,
+        "rowsInjected": 5,
+        "row1Seq": 1,
+        "row5Seq": 5
+      }
+    },
+    {
+      "testId": "POC-XLS-03",
+      "name": "Formula Preservation & Target Node Assertion",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 20.26,
+      "heapDeltaBytes": 2950944,
+      "details": {
+        "formulaPreserved": true,
+        "formulaString": "SUM(E10:E29)",
+        "cellRef": "E30"
+      }
+    },
+    {
+      "testId": "POC-XLS-04",
+      "name": "Cell Styling & Formatting Preservation",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 19.33,
+      "heapDeltaBytes": -3387704,
+      "details": {
+        "fontPreserved": true,
+        "fillPreserved": true,
+        "fontName": "Arial",
+        "fillArgb": "FF2F5597"
+      }
+    },
+    {
+      "testId": "POC-XLS-05",
+      "name": "Merged Range Geometry Preservation",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 14.51,
+      "heapDeltaBytes": 2905640,
+      "details": {
+        "mergedGeometryPreserved": true,
+        "masterAddress": "A1",
+        "isSlaveMerged": true
+      }
+    },
+    {
+      "testId": "POC-XLS-06",
+      "name": "Drawing & Image Preservation (Logo)",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 27.72,
+      "heapDeltaBytes": -3255832,
+      "details": {
+        "imagePreserved": true,
+        "imageCount": 1,
+        "extension": "png"
+      }
+    },
+    {
+      "testId": "POC-XLS-07",
+      "name": "Page Setup & Print Area Preservation",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 13.98,
+      "heapDeltaBytes": 2753888,
+      "details": {
+        "pageSetupPreserved": true,
+        "orientation": "landscape",
+        "paperSize": 9
+      }
+    },
+    {
+      "testId": "POC-XLS-08",
+      "name": "Malformed Archive Exception Handling",
+      "category": "Excel",
+      "status": "PASSED",
+      "durationMs": 0.89,
+      "heapDeltaBytes": 37224,
+      "details": {
+        "exceptionCaught": true,
+        "exceptionMessage": "Corrupted zip: can't find end of central directory"
+      }
+    },
+    {
+      "testId": "POC-DOC-01",
+      "name": "Scalar Placeholder Replacement",
+      "category": "Word",
+      "status": "PASSED",
+      "durationMs": 33.4,
+      "heapDeltaBytes": 1612688,
+      "details": {
+        "masterImmutable": true,
+        "hasDate": true,
+        "hasInspector": true,
+        "hasLeftoverTag": false
+      }
+    },
+    {
+      "testId": "POC-DOC-02",
+      "name": "Fragmented Split-Run Token Replacement",
+      "category": "Word",
+      "status": "PASSED",
+      "durationMs": 5.31,
+      "heapDeltaBytes": 807560,
+      "details": {
+        "masterImmutable": true,
+        "isSplitRunResolved": true,
+        "hasReplacedText": true
+      }
+    },
+    {
+      "testId": "POC-DOC-03",
+      "name": "Multi-Paragraph Narrative Body Injection",
+      "category": "Word",
+      "status": "PASSED",
+      "durationMs": 4.11,
+      "heapDeltaBytes": 298912,
+      "details": {
+        "multiParagraphPreserved": true,
+        "hasLinebreaks": true,
+        "linebreakCount": 2
+      }
+    },
+    {
+      "testId": "POC-DOC-04",
+      "name": "Table Cell Population & Grid Preservation",
+      "category": "Word",
+      "status": "PASSED",
+      "durationMs": 7.4,
+      "heapDeltaBytes": 842112,
+      "details": {
+        "tablePreserved": true,
+        "hasTableTags": true,
+        "rowCount": 4,
+        "rowsRendered": 3
+      }
+    },
+    {
+      "testId": "POC-DOC-05",
+      "name": "Header Logo & Package Integrity Integrity",
+      "category": "Word",
+      "status": "PASSED",
+      "durationMs": 4.17,
+      "heapDeltaBytes": 450840,
+      "details": {
+        "packageIntegrityValid": true,
+        "hasContentTypes": true,
+        "hasRels": true,
+        "hasDocument": true
+      }
+    },
+    {
+      "testId": "POC-DOC-06",
+      "name": "Unmapped Placeholder Handling (Custom NullGetter)",
+      "category": "Word",
+      "status": "PASSED",
+      "durationMs": 3.25,
+      "heapDeltaBytes": 467264,
+      "details": {
+        "unmappedTagHandled": true,
+        "handledInspector": true,
+        "handledShift": true
+      }
+    },
+    {
+      "testId": "POC-SEC-01",
+      "name": "Master Template Immutability Assertion (50 Cycles)",
+      "category": "Security",
+      "status": "PASSED",
+      "durationMs": 538.64,
+      "heapDeltaBytes": 1396776,
+      "details": {
+        "iterations": 50,
+        "initialHash": "e7036efece6beecde22ddbc5aaae7db49b359e5c9fe470ff12f309203d88623a",
+        "finalHash": "e7036efece6beecde22ddbc5aaae7db49b359e5c9fe470ff12f309203d88623a",
+        "byteDelta": 0,
+        "masterImmutable": true
+      }
+    },
+    {
+      "testId": "POC-SEC-02",
+      "name": "Destination Path Collision Guard",
+      "category": "Security",
+      "status": "PASSED",
+      "durationMs": 0.19,
+      "heapDeltaBytes": 12016,
+      "details": {
+        "collisionBlocked": true,
+        "errorMsg": "ERR-SEC-TARGET-IS-MASTER: Target destination cannot overwrite the master template."
+      }
+    },
+    {
+      "testId": "POC-SEC-03",
+      "name": "Macro Quarantine Enforcement (.xlsm inspection)",
+      "category": "Security",
+      "status": "PASSED",
+      "durationMs": 0.54,
+      "heapDeltaBytes": 49168,
+      "details": {
+        "macroDetected": true,
+        "isQuarantined": true,
+        "quarantinedPart": "xl/vbaProject.bin",
+        "advisory": "Macro-enabled templates (.xlsm / .docm) are blocked by security policy DEC-005."
+      }
+    },
+    {
+      "testId": "POC-SEC-04",
+      "name": "Zip Bomb Extraction Ceiling (15:1 / 100MB)",
+      "category": "Security",
+      "status": "PASSED",
+      "durationMs": 0.13,
+      "heapDeltaBytes": 5144,
+      "details": {
+        "ratioBlocked": true,
+        "ceilingBlocked": true,
+        "maxRatio": 15,
+        "maxCeilingMb": 100
+      }
+    }
+  ]
+}

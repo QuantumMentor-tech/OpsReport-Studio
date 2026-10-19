@@ -1,0 +1,40 @@
+{
+  "name": "opsreport-studio",
+  "version": "0.1.0-alpha",
+  "description": "OpsReport Studio — Automated Operational & Security Report Generation Desktop Application",
+  "private": true,
+  "main": "dist-electron/main/index.js",
+  "type": "module",
+  "author": "OpsReport Studio Engineering Team",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "lint": "eslint .",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",
+    "format:write": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.{ts,tsx}\"",
+    "test": "vitest run",
+    "test:smoke": "vitest run tests/smoke"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.71.2",
+    "@typescript-eslint/parser": "^8.71.2",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^32.1.2",
+    "eslint": "^10.13.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.6",
+    "vite-plugin-electron": "^0.28.7",
+    "vite-plugin-electron-renderer": "^0.14.5",
+    "vitest": "^2.1.1"
+  }
+}
