@@ -219,7 +219,110 @@ The Requirements Traceability Matrix guarantees that every user requirement, ope
 
 ---
 
-## 14. Traceability Governance & Lifecycle Sign-Off
+## 14. Application Shell, Navigation & Shared UI Traceability (Step 12 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **SHL-LAY-001** | Desktop Application Shell (`AppShell`) | NFR-MNT-01, NFR-COMP-01 | Main Frame Layout | Responsive 2-column layout; HTML5 landmarks (`<aside>`, `<header>`, `<main>`); keyboard skip-link | `src/renderer/components/shell/AppShell.tsx` | Verified UI Baseline |
+| **SHL-NAV-001** | Centralized Primary Navigation | REQ-001, NFR-MNT-01 | View Switching Model | Authoritative `PRIMARY_NAV_ITEMS` registry; `NavigationContext`; safe fallback to dashboard | `src/renderer/navigation/` | Verified UI Baseline |
+| **SHL-SDB-001** | Desktop Sidebar with Collapse Mode | NFR-USE-01, NFR-COMP-01 | Primary Navigation Menu | Brand logo, version, accessible nav list, active tokens, planned badges, collapse toggle | `src/renderer/components/shell/Sidebar.tsx` | Verified UI Baseline |
+| **SHL-HDR-001** | Global Application Header (`AppHeader`) | NFR-USE-01, REQ-011 | Top Context Bar | Active view title, sidebar toggle trigger, accessible `ThemeToggle` integration | `src/renderer/components/shell/AppHeader.tsx` | Verified UI Baseline |
+| **SHL-DSH-001** | Operational Landing Dashboard | REQ-001, NFR-USE-01 | Initial Destination | SMK-07 foundation status, 7 static report category scope cards, honest empty state | `src/renderer/views/DashboardView.tsx` | Verified UI Baseline |
+| **SHL-SET-001** | Functional Settings & Diagnostics | REQ-011, NFR-SEC-01 | Preferences & Diagnostics | Display theme selector (Dark/Light/System), desktop security runtime specs, roadmap alignment | `src/renderer/views/SettingsView.tsx` | Verified UI Baseline |
+| **SHL-PLC-001** | Honest Planned Module Placeholder | NFR-MNT-01, DEC-034 | Scope Protection | Displays assigned roadmap milestone, explains capabilities, return to dashboard button | `src/renderer/views/PlaceholderView.tsx` | Verified UI Baseline |
+| **SHL-CMP-001** | Shared UI Component Primitives | NFR-MNT-01, NFR-USE-01 | Reusable UI Elements | `Button` (5 variants, 3 sizes), `Card`, `Badge`, `EmptyState` (4 scenarios), `PageHeader` | `src/renderer/components/common/` | Verified UI Baseline |
+
+---
+
+## 15. SQLite Database Schema & Persistence Traceability (Step 13 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **DB-ENG-001** | `better-sqlite3` Native Engine | NFR-PERF-01, NFR-REL-01, DEC-015 | Local Persistence Engine | Synchronous C++ binding to SQLite v3.45+; thread-affinity safe; sub-millisecond execution | `OPSREPORT_STUDIO_PERSISTENCE_GUIDE.md` | Verified Persistence Baseline |
+| **DB-CFG-001** | Production PRAGMA Configuration | NFR-REL-01, NFR-SEC-01, DEC-035 | Storage Durability & Integrity | `journal_mode = WAL`, `foreign_keys = ON`, `busy_timeout = 5000`, `synchronous = NORMAL` | `src/storage/database/config.ts` | Verified Persistence Baseline |
+| **DB-PTH-001** | Local Application Data Directory | DAT-STR-001, NFR-SEC-01 | Secure File Storage | `%LOCALAPPDATA%\OpsReportStudio\Database\opsreport.db`; isolated from source & web assets | `src/storage/database/config.ts` | Verified Persistence Baseline |
+| **DB-MIG-001** | Deterministic Migration Runner | NFR-REL-01, NFR-MNT-01 | Schema Evolution Authority | Sequential version tracking (`PRAGMA user_version`), SHA-256 checksums, downgrade protection | `src/storage/database/migrations/migrator.ts` | Verified Persistence Baseline |
+| **DB-SCH-001** | Initial V1 Foundational Schema | REQ-008, REQ-012, DAT-STR-001 | Relational Data Integrity | `schema_migrations`, `report_categories` (7 confirmed seeds), `stations`, `app_settings` | `src/storage/database/migrations/001_initial_schema.ts` | Verified Persistence Baseline |
+| **DB-REP-STN-001** | Station Repository & Ordering API | REQ-008, REQ-012, CTR-STN-001 | Station Persistence | Stable branded IDs, non-empty names, explicit `display_order`, atomic transactional reordering | `src/storage/database/repositories/station-repository.ts` | Verified Persistence Baseline |
+| **DB-REP-CAT-001** | Report Category Registry Repository | REQ-001, REQ-002, DEC-014 | Category Persistence | Read-only access to 7 approved category reference records; format, schema, active indicators | `src/storage/database/repositories/category-repository.ts` | Verified Persistence Baseline |
+| **DB-REP-SET-001** | Application Settings Repository | REQ-011, DAT-STR-001 | Key-Value Store | Typed configuration storage, upsert/get/delete, JSON validation, isolation from credentials | `src/storage/database/repositories/settings-repository.ts` | Verified Persistence Baseline |
+| **DB-ERR-001** | Database Error Domain Integration | NFR-REL-01, DEC-024 | Reliability & Diagnostics | Maps SQLite constraints/locks/corruption to `AppError` codes; redacts queries from logs | `src/storage/database/connection.ts` | Verified Persistence Baseline |
+
+---
+
+## 16. Station Management & Configuration Editor Traceability (Step 14 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **STN-UI-001** | Station Management View (`StationsView`) | REQ-008, REQ-012, NFR-USE-01 | Configuration Editor UI | Responsive desktop view with summary counters, search, active filter, empty state | `src/renderer/views/StationsView.tsx` | Verified UI Baseline |
+| **STN-IPC-001** | Sandboxed Station Preload IPC Bridge | NFR-SEC-01, DEC-036 | Process Boundary Bridge | `window.opsreport.stations` exposing typed, validated methods over Electron IPC | `src/preload/index.ts` | Verified UI Baseline |
+| **STN-CLI-001** | Station Client Service (`IStationClient`) | NFR-REL-01, NFR-MNT-01 | Client Persistence Facade | Dual Electron IPC client & InMemory fallback provider for unit tests and web previews | `src/renderer/services/station-client.ts` | Verified UI Baseline |
+| **STN-ORD-001** | Accessible Operational Sequence Reordering | REQ-008, REQ-012, CTR-STN-001 | Ordering Engine | Atomic Move Up/Down controls swapping sequence numbers within an isolated SQLite transaction | `src/renderer/views/StationsView.tsx` | Verified UI Baseline |
+| **STN-VAL-001** | Station Name Uniqueness & Validation | CTR-STN-001, NFR-REL-01 | Data Integrity Rule | 1..150 chars, trimmed, case-insensitive uniqueness enforced in UI and database | `src/storage/database/repositories/station-repository.ts` | Verified UI Baseline |
+| **STN-DEL-001** | Safe Deletion & Contiguous Re-indexing | CTR-STN-001, REQ-012 | Lifecycle Preservation | Deletion modal warning; atomic transaction re-indexes remaining stations to contiguous 1..N | `src/storage/database/repositories/station-repository.ts` | Verified UI Baseline |
+| **STN-EMP-001** | Truthful Initial Configuration State | NFR-USE-01, DEC-036 | Ergonomic Onboarding | Clean empty state without fabricated stations; explicit prompt to establish sequence | `src/renderer/views/StationsView.tsx` | Verified UI Baseline |
+
+---
+
+## 17. Report Category Registry & Template Metadata Traceability (Step 15 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **CAT-REG-001** | Report Category Registry View (`TemplatesView`) | REQ-001, REQ-004, NFR-USE-01 | UI Category Management | Responsive dual-tab interface managing categories and template descriptors with search, filters, modals | `src/renderer/views/TemplatesView.tsx` | Verified Baseline |
+| **CAT-MIG-002** | Schema Migration 002 (Lifecycle & Metadata) | NFR-REL-01, DEC-037 | Persistence Migration | Adds `is_active` & `updated_at` to `report_categories`; creates `template_metadata` with FK `ON DELETE RESTRICT` | `src/storage/database/migrations/002_category_lifecycle_and_template_metadata.ts` | Verified Baseline |
+| **CAT-LIF-001** | Report Category Lifecycle & Deletion Guard | REQ-001, NFR-REL-01, DEC-037 | Domain Rule Enforcement | Built-in 7 categories cannot be deleted; categories referenced by templates cannot be deleted; activation toggle supported | `src/storage/database/repositories/category-repository.ts` | Verified Baseline |
+| **TPL-MET-001** | Template Metadata Entity & Repository | REQ-004, REQ-006, DEC-037 | Relational Data Model | Associates template descriptors with categories, format (`EXCEL_XLSX`/`WORD_DOCX`), status (`DRAFT`/`ACTIVE`/`ARCHIVED`), file ref | `src/storage/database/repositories/template-metadata-repository.ts` | Verified Baseline |
+| **CAT-IPC-001** | Category & Template Preload IPC Bridge | NFR-SEC-01, DEC-037 | Process Boundary Bridge | `window.opsreport.categories` and `window.opsreport.templates` exposing typed, validated methods over Electron IPC | `src/preload/index.ts` | Verified Baseline |
+| **CAT-CLI-001** | Category & Template Client Services | NFR-REL-01, NFR-MNT-01 | Client Persistence Facade | Dual Electron IPC client & InMemory fallback provider for unit tests and web previews | `src/renderer/services/category-client.ts`, `template-client.ts` | Verified Baseline |
+| **TPL-NOT-001** | Truthful Template Vault Scope Callout | NFR-USE-01, DEC-037 | Ergonomic Scope Boundary | Explicit advisory note clarifying physical template file vault import belongs to Step 17 | `src/renderer/views/TemplatesView.tsx` | Verified Baseline |
+
+---
+
+## 18. Report Session Data Model & Draft Persistence Traceability (Step 16 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **SES-ENT-001** | Report Session Entity & Branded Identifier | REQ-001, REQ-009, DEC-038 | Domain Entity Model | Branded `ReportSessionId`, `session_title`, `status`, `payload_version`, `form_data` JSON, ISO timestamps | `src/shared/types/sessions.ts` | Verified Baseline |
+| **SES-MIG-003** | Schema Migration 003 (Sessions & Drafts) | NFR-REL-01, DEC-038 | Persistence Migration | Advances schema to v3; creates `report_sessions` and `report_session_stations` with FK constraints and indexes | `src/storage/database/migrations/003_report_session_and_draft_persistence.ts` | Verified Baseline |
+| **SES-REL-001** | Category & Template Referential Integrity | REQ-001, REQ-004, NFR-REL-01 | Referential Integrity Rule | Category FK `ON DELETE RESTRICT`; Template FK `ON DELETE SET NULL`; prevents deleting referenced categories | `src/storage/database/repositories/session-repository.ts` | Verified Baseline |
+| **SES-STN-001** | Frozen Station Sequence Snapshot | REQ-008, DEC-025, DEC-038 | Historical Immutability | Captures station ID, sequence order, and names snapshot; global reordering does not mutate historical draft sequences | `src/storage/database/repositories/session-repository.ts` | Verified Baseline |
+| **SES-REC-001** | Resumable Draft Recovery Query | REQ-009, REQ-010, DEC-038 | Failure Recovery Engine | Identifies drafts in `DRAFT` or `IN_PROGRESS` status ordered by `updated_at DESC`; excludes completed/cancelled | `src/storage/database/repositories/session-repository.ts` | Verified Baseline |
+| **SES-IPC-001** | Sandboxed Session Preload IPC Bridge | NFR-SEC-01, DEC-038 | Process Boundary Bridge | `window.opsreport.sessions` exposing typed, validated persistence methods over Electron IPC | `src/preload/index.ts` | Verified Baseline |
+| **SES-CLI-001** | Session Client Service (`ISessionClient`) | NFR-REL-01, NFR-MNT-01 | Client Persistence Facade | Dual Electron IPC client & InMemory fallback provider for unit tests and web previews | `src/renderer/services/session-client.ts` | Verified Baseline |
+
+---
+
+## 19. Master Template Vault & File Storage Traceability (Step 17 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **VLT-MGR-001** | Centralized Vault Storage Manager (`VaultManager`) | REQ-004, REQ-005, DEC-039 | Storage Subsystem Core | Singleton managing application-owned storage root (`%LOCALAPPDATA%\OpsReportStudio`), canonical directory paths, and initialization | `src/storage/vault/vault-manager.ts` | Verified Baseline |
+| **VLT-SEC-001** | Path Traversal & Security Boundary Guards | NFR-SEC-01, DEC-039 | Security Enforcement Layer | Rejection of null bytes, directory traversal (`..`), invalid identifier patterns; case-insensitive boundary confinement checks | `src/storage/vault/path-security.ts` | Verified Baseline |
+| **VLT-DIR-001** | Deterministic Storage Layout & Physical Separation | REQ-004, NFR-REL-01, DEC-039 | Filesystem Architecture | Strict separation of Templates, Scratch, Reports, Database, Logs, and Backups directories; zero storage in source or install dirs | `src/storage/vault/vault-config.ts` | Verified Baseline |
+| **VLT-SCR-001** | Ephemeral Scratch Sandbox & Stale File Purge | NFR-REL-01, DEC-039 | Lifecycle Management | Temporary staging sandbox for future imports; automated startup sweep purges orphaned `.tmp` files older than 15 minutes | `src/storage/vault/vault-manager.ts` | Verified Baseline |
+| **VLT-IMM-001** | Vault Overwrite Protection Guard (INV-DAT-006) | REQ-002, REQ-003, DEC-039 | Data Protection Invariant | Output report resolution verifies destination never points inside the Master Template Vault; prevents corrupting reusable masters | `src/storage/vault/path-security.ts` | Verified Baseline |
+| **VLT-IPC-001** | Sandboxed Vault Preload IPC Bridge | NFR-SEC-01, DEC-039 | Process Boundary Bridge | `window.opsreport.vault` exposing `getStatus`, `initialize`, and `checkTemplateExists` across Electron context isolation | `src/preload/index.ts` | Verified Baseline |
+| **VLT-CLI-001** | Vault Client Service (`IVaultClient`) | NFR-REL-01, NFR-MNT-01 | Client Storage Facade | Dual Electron IPC client & InMemory fallback provider for unit tests, storybooks, and browser preview environments | `src/renderer/services/vault-client.ts` | Verified Baseline |
+| **VLT-STA-001** | Truthful Master Vault Storage Status Card | NFR-USE-01, DEC-039 | Ergonomic Status Presentation | UI status card in `TemplatesView.tsx` showing canonical storage path, readiness badge, and scratch sandbox health | `src/renderer/views/TemplatesView.tsx` | Verified Baseline |
+
+---
+
+## 20. Excel and Word Template Import & File Validation Traceability (Step 18 Baseline)
+
+| Item ID | Item Name | Associated Requirements | Architectural Role / Boundary | Key Specifications & Constraints | Primary Traceability Artifact | Decision Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **IMP-PIE-001** | Authoritative Template Import Pipeline | REQ-002, REQ-003, DEC-040 | Storage Import Engine | 8-stage pipeline: source inspection, scratch staging, container validation, vault promotion, metadata registration, cleanup | `src/storage/vault/template-importer.ts` | Verified Baseline |
+| **IMP-VAL-001** | Bounded Open XML Container Validator | NFR-SEC-01, NFR-REL-01, DEC-040 | Document Security Guard | Magic byte check (`PK\x03\x04`), 25MB file ceiling, 100MB expansion limit, 15:1 ratio ceiling, 1,000 entry limit, required part checks | `src/storage/vault/document-validator.ts` | Verified Baseline |
+| **IMP-PRV-001** | Source File Preservation Invariant | REQ-002, REQ-003, DEC-040 | Data Safety Invariant | Original source document is strictly read-only; never modified, moved, renamed, or unlinked under any outcome | `src/storage/vault/template-importer.ts` | Verified Baseline |
+| **IMP-STG-001** | Controlled Ephemeral Staging & Cleanup | NFR-REL-01, DEC-040 | Lifecycle Management | Unique staging in `%LOCALAPPDATA%\OpsReportStudio\Scratch\`; guaranteed cleanup in `finally` block on success or error | `src/storage/vault/template-importer.ts` | Verified Baseline |
+| **IMP-MAC-001** | Macro Quarantine Policy Enforcement | DEC-005, ADR-OPSREPORT-002, DEC-040 | Threat Mitigation Guard | Quarantines and rejects `.xlsm`/`.docm` or any archive containing `vbaProject.bin`; eliminates VBA execution risks | `src/storage/vault/document-validator.ts` | Verified Baseline |
+| **IMP-IPC-001** | Native File Dialog & Sandboxed Preload IPC | NFR-SEC-01, DEC-040 | Process Boundary Bridge | `dialog.showOpenDialog` file picker and `window.opsreport.templates` (`selectFile`, `importTemplate`) across context isolation | `src/preload/index.ts`, `src/main/index.ts` | Verified Baseline |
+| **IMP-ROL-001** | Consistency Rollback on Persistence Error | NFR-REL-01, DEC-040 | Failure Recovery Protocol | Promoted file in `Templates/` is immediately unlinked if database metadata insert/update fails; prevents orphan files | `src/storage/vault/template-importer.ts` | Verified Baseline |
+| **IMP-MOD-001** | Accessible Import Template Dialog Modal | NFR-USE-01, DEC-040 | UI Interaction Flow | Modal dialog in `TemplatesView.tsx` with file picker, format detection badge, category alignment, and error alerts | `src/renderer/views/TemplatesView.tsx` | Verified Baseline |
+
+---
+
+## 21. Traceability Governance & Lifecycle Sign-Off
 
 * **Requirements Coverage:** 100% of explicit user requirements (`REQ-001` through `REQ-012`, `NFR-REL-01` through `NFR-COMP-02`) are mapped to testable functional, non-functional, and architectural specifications.
 * **Step 2 Schema Completeness:** All 7 approved operational report categories are tracked with explicit reporting units, formats, and preliminary schema dictionaries.
@@ -232,7 +335,18 @@ The Requirements Traceability Matrix guarantees that every user requirement, ope
 * **Step 9 Foundation & Build Configuration Completeness:** Production repository initialized with Git; package manifests and lockfiles locked; dual Vite/Electron build configured; hardened sandboxed window entry created; 7 automated smoke tests passing; all code formatting and static type checks passing.
 * **Step 10 Type Foundation & Error Model Completeness:** Dual TypeScript compiler configuration strictness ratified; ESLint 10 integrated; semantic branded identifiers established; discriminated Result pattern implemented; centralized `AppError` and 24 error codes created; safe unknown error normalization and sensitive data redaction verified across 24 automated unit and smoke tests.
 * **Step 11 Design System & Theming Completeness:** Semantic CSS tokens implemented for Dark (`#0b1120`) and Light (`#ffffff`) appearances; typography and spacing scales codified; WCAG 2.2 Level AA contrast verified via automated mathematical tests; theme preference persistence and accessible `ThemeToggle` component implemented across 35 passing tests.
-* **Forward Verification:** Step 12 (Application Shell, Navigation, Dashboard & Shared UI Components) will construct the responsive two-column desktop layout, persistent sidebar navigation, primary operational dashboard view, and core accessible UI component primitives (Button, Card, Input, Badge, Table) based on the ratified design tokens and theme architecture.
+* **Step 12 Application Shell & Navigation Completeness:** Reusable desktop `AppShell`, centralized `PRIMARY_NAV_ITEMS` registry, `DashboardView` with truthful static scope reference, functional `SettingsView`, honest `PlaceholderView` for planned features, and shared UI primitives (`Button`, `Card`, `Badge`, `EmptyState`, `PageHeader`) implemented and verified across 52 passing tests (9 test suites) and a 100% successful production build.
+* **Step 13 Database Schema & Persistence Completeness:** Foundational SQLite persistence layer implemented using `better-sqlite3` v13; WAL mode, foreign keys, and 5000ms busy timeout active; deterministic migration runner (`PRAGMA user_version` + `schema_migrations`) with checksum and downgrade protection; V1 schema implementing `report_categories` (seeded with 7 verified reference categories), `stations` (ordered, contiguous, empty awaiting Step 14), and `app_settings`; typed repositories (`StationRepository`, `CategoryRepository`, `SettingsRepository`) with parameterized SQL, atomic transaction reordering, and `AppError` mapping; verified across 80 passing automated unit tests (14 test suites).
+* **Step 14 Station Management Completeness:** Authoritative station management and ordering interface (`StationsView`) implemented and integrated into the desktop application shell; sandboxed context-isolated Electron IPC bridge (`window.opsreport.stations`) wired to `StationRepository`; accessible operational sequence reordering (Move Up/Down) with atomic transactional re-indexing; case-insensitive name uniqueness validation; contiguous 1..N ordinal sequence maintenance on addition, reordering, and deletion; verified across 97 passing automated tests (16 test suites) with clean production builds.
+* **Step 15 Category Registry & Template Metadata Completeness:** Authoritative report category registry and template metadata management implemented and integrated into navigation (`TemplatesView`); migration 002 bumping schema version to 2 and adding lifecycle columns to `report_categories`; new relational `template_metadata` table linking template records to categories via foreign keys (`ON DELETE RESTRICT`); deletion restrictions preventing deletion of built-in categories or categories referenced by templates; seeded 7 default template descriptors (`INSERT OR IGNORE`) for the 7 initial categories; typed IPC bridges and client services (`CategoryClient`, `TemplateClient`); 129 passing automated unit tests (20 test suites) with zero lint errors and clean production builds.
+* **Step 16 Report Session Persistence Completeness:** Authoritative report session data model, draft persistence layer, and recovery foundation implemented; Migration 003 bumping schema version to 3 and creating `report_sessions` and `report_session_stations`; frozen station snapshots (`DEC-025`) guaranteeing historical isolation from global station reordering; referential integrity preventing accidental deletion of referenced categories or stations; atomic transactional draft updates with `updated_at` tracking; resumable session querying (`DRAFT`, `IN_PROGRESS`); typed IPC bridge and client services (`SessionRepository`, `SessionClient`); verified across 147 passing automated unit tests (22 test suites) with zero lint warnings, full Prettier compliance, and clean production builds.
+* **Step 17 Master Template Vault & Storage Completeness:** Authoritative master template vault and organized application-managed file storage foundation implemented; centralized `VaultManager` singleton created; Windows standard `%LOCALAPPDATA%\OpsReportStudio` resolved with deterministic physical separation among `Templates/`, `Scratch/`, `Reports/`, `Database/`, `Logs/`, and `Backups/`; stable internal `TemplateId` naming (`{templateId}.{xlsx|docx}`) preventing path corruption from editable display names; rigorous path traversal (`..`), null byte, and boundary escape guards (`assertPathInsideRoot`); master template overwrite protection guard (`assertTargetNotInsideVault`, `INV-DAT-006`); ephemeral scratch sandbox management with automatic 15-minute stale file purge sweep; zero database schema migration required (metadata and physical files decoupled); sandboxed Electron IPC bridge (`window.opsreport.vault`) and typed client services (`ElectronVaultClient`, `InMemoryVaultClient`); Master Template Vault Storage status card integrated into `TemplatesView.tsx`; verified across 164 passing automated tests (24 test suites) with zero lint warnings, full Prettier compliance, and clean production builds.
+* **Step 18 Excel and Word Template Import Completeness:** Authoritative template import pipeline (`TemplateImporter`), container security validator (`DocumentValidator`), and user-facing import interface implemented; 8-stage pipeline protecting original user source files (100% byte-for-byte read-only preservation); Open XML container validation via `PizZip` inspecting magic bytes (`PK\x03\x04`), 25MB file ceiling, 100MB uncompressed ceiling, 15:1 decompression ratio ceiling, 1,000 entry ceiling, and required core Open XML components; macro quarantine (DEC-005) blocking `.xlsm`/`.docm` and `vbaProject.bin`; promotion to managed vault (`Templates/{templateId}.{xlsx|docx}`) with automatic unlink rollback if database registration fails; guaranteed scratch staging cleanup; native desktop file picker (`dialog.showOpenDialog`) with format allowlist; accessible `ImportTemplateModal` integrated into `TemplatesView.tsx`; verified across 186 passing automated tests (26 test suites) with zero lint warnings, full Prettier compliance, and clean production builds.
+* **Forward Verification:** Step 19 (Master-Template Immutability, Versioning & Cloned Work Copies) will establish OS-level read-only attributes on promoted master files, immutable revision tracking, and copy-first work file cloning for downstream generation engines without mutating master templates.
+
+
+
+
 
 
 

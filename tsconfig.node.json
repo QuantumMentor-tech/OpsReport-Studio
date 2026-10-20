@@ -21,6 +21,7 @@
     "vitest.config.ts",
     "src/main/**/*.ts",
     "src/preload/**/*.ts",
+    "src/storage/**/*.ts",
     "src/shared/**/*.ts",
     "tests/**/*.ts"
   ]

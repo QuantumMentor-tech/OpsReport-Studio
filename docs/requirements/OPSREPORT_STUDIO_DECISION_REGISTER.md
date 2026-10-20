@@ -454,6 +454,150 @@ This document serves as the authoritative repository of architectural, technical
 * **Decision Owner:** Principal Product Designer / Frontend Architect.
 * **Current Status:** **CONFIRMED BASELINE (Option A: Semantic CSS Tokens, Dual Theme Architecture & WCAG 2.2 AA Verification)**.
 
+---
+
+### DEC-034: Application Shell, Centralized Navigation Model & Truthful State Presentation
+* **Question:** How should the desktop application layout, view switching, and placeholder states for planned features be architected in Step 12?
+* **Why It Matters:** Hard-coded routing or scattered navigation links lead to layout duplication, fragile view switching, and confusing user experiences. Displaying fabricated records or simulated generation outcomes misleads users and undermines QA integrity.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):* Establish a responsive two-column desktop shell (`AppShell`) binding `Sidebar`, `AppHeader`, and `<main id="main-content">` with accessible HTML5 landmarks and skip-links; govern view switching through a single authoritative registry (`PRIMARY_NAV_ITEMS`) and `NavigationContext`; preserve the foundation diagnostics card satisfying SMK-07; render an introductory static scope reference of the 7 planned report categories; and represent unbuilt destinations (`Reports`, `Templates`, `Stations`, `History`) using an honest `PlaceholderView` with clear roadmap attribution and return navigation.
+  2. *Option B:* Install complex browser-based client routers (e.g. React Router) with arbitrary route guards, fabricate recent reports feeds, and create mock template records. (REJECTED - Adds unnecessary dependencies, creates maintenance churn, and violates truthful reporting requirements).
+* **Risks & Dependencies:** Future roadmap steps must register new active views in `navigation-config.ts` and `App.tsx`.
+* **Evidence Needed:** Step 12 Completion Report (`STEP_12_APPLICATION_SHELL_REPORT.md`), `APPLICATION_SHELL_AND_NAVIGATION.md`.
+* **Decision Owner:** Principal Product Designer / Desktop Application Architect.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Centralized Navigation Context, Semantic Shell & Truthful State Presentation)**.
+
+---
+
+### DEC-035: SQLite Database Driver, Schema Versioning & Low-Level Persistence Architecture
+* **Question:** Which SQLite driver, schema migration approach, connection PRAGMAs, and repository architecture should be implemented in Step 13?
+* **Why It Matters:** Database crashes, missing foreign key enforcement, or asynchronous thread pool bottlenecks can corrupt data and freeze desktop applications. Storing Office templates directly in SQLite BLOBs or hardcoding database file locations undermines portability and reliability.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):* Adopt `better-sqlite3` (v11+) executing synchronously within the Node.js main/worker processes; store the database at `%LOCALAPPDATA%\OpsReportStudio\Database\opsreport.db`; enforce mandatory PRAGMAs (`journal_mode = WAL`, `foreign_keys = ON`, `synchronous = NORMAL`, `busy_timeout = 5000`); implement deterministic forward-only schema migrations tracking versions in `schema_migrations` and `PRAGMA user_version` with automatic downgrade protection; implement `StationRepository` with contiguous ordinal sequence ordering and transactional atomic reordering; seed the 7 confirmed report categories while keeping the stations table empty; and map all errors to `AppError`.
+  2. *Option B:* Adopt asynchronous `sqlite3` driver with ORMs (Prisma / TypeORM), store templates as database BLOBs, or use arbitrary unversioned SQL scripts. (REJECTED - High thread-pool contention, unnecessary abstraction weight, and violates storage segregation principles).
+* **Risks & Dependencies:** Step 14 station management must consume `StationRepository` and preserve the `display_order ASC` query sequence.
+* **Evidence Needed:** Step 13 Completion Report (`STEP_13_DATABASE_IMPLEMENTATION_REPORT.md`), `OPSREPORT_STUDIO_DATABASE_SCHEMA.md`, `OPSREPORT_STUDIO_PERSISTENCE_GUIDE.md`.
+* **Decision Owner:** Principal Database Architect / Senior SQLite Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: better-sqlite3 WAL, Versioned Migrations & Repository Architecture)**.
+
+---
+
+### DEC-036: Station Management UI, Accessible Ordering & IPC Architecture
+* **Question:** How should the desktop user interface, IPC communication bridge, and contiguous operational sequence management be architected for Step 14?
+* **Why It Matters:** Station order in OpsReport Studio directly governs table row sequences in generated Excel and Word reports. If stations are sorted alphabetically, or if ordering updates fail partially, report consistency is permanently damaged. Exposing raw SQL execution to the renderer violates application security.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):* Connect the React renderer to the SQLite database via a sandboxed, context-isolated Electron IPC bridge (`window.opsreport.stations`); provide an in-memory fallback client for tests and standalone previews; display stations in strictly persisted operational order (`display_order ASC`); implement accessible operational sequence controls (Move Up/Down) that execute atomic swaps within an isolated database transaction; enforce case-insensitive name uniqueness and 1..150 character constraints; automatically re-index remaining stations upon deletion to guarantee a contiguous 1..N sequence without gaps; and provide an honest empty state awaiting user configuration without invented production station records.
+  2. *Option B:* Implement client-side drag-and-drop requiring third-party libraries, sort stations alphabetically by default, allow arbitrary gaps in display orders, and expose direct SQLite execution strings over IPC. (REJECTED - Inaccessible, violates contiguous ordering invariant, creates security vulnerabilities, and breaks document generator sequence requirements).
+* **Risks & Dependencies:** Future Step 16 report draft workflows will read the authoritative station list directly from this persistence layer.
+* **Evidence Needed:** Step 14 Implementation Report (`STEP_14_STATION_MANAGEMENT_REPORT.md`), `STATION_MANAGEMENT_PERSISTENCE_CONTRACT.md`.
+* **Decision Owner:** Senior Full-Stack/Desktop Application Engineer / Senior UI/UX Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Context-Isolated IPC, Contiguous Reordering & Accessible Station Management)**.
+
+---
+
+### DEC-037: Report Category Registry & Template Metadata Architecture
+* **Question:** How should the operational report category registry, category lifecycle rules, and template metadata foundation be architected and persisted in Step 15?
+* **Why It Matters:** Mixing template files with metadata records creates confusion and bloat. Cascading deletions of report categories could silently destroy historical reports or template configurations. Hardcoding category lists in individual UI screens creates synchronization bugs across reporting workflows.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Maintain an authoritative, versioned relational schema in SQLite via Migration 002 (`002_category_lifecycle_and_template_metadata.ts`) with schema version 2.
+     - Extend `report_categories` with lifecycle columns (`is_active`, `updated_at`) and active index. Preserve the 7 confirmed initial categories: Security Incident (`WORD_DOCX`), Station Light (`EXCEL_XLSX`), Fan (`EXCEL_XLSX`), Pole Light (`EXCEL_XLSX`), Fire Extinguisher (`EXCEL_XLSX`), Pillar (`EXCEL_XLSX`), Fence (`EXCEL_XLSX`).
+     - Enforce deletion restrictions: built-in system categories cannot be deleted; categories referenced by template metadata records cannot be deleted (`ON DELETE RESTRICT`). Deactivation is supported for retiring categories without breaking references.
+     - Establish `template_metadata` table linking template descriptors to report categories via foreign key, tracking document format (`EXCEL_XLSX` / `WORD_DOCX`), lifecycle status (`DRAFT`, `ACTIVE`, `ARCHIVED`), and master template filename reference.
+     - Seed 7 default template descriptors for the initial categories (`INSERT OR IGNORE`) so repeated initialization never duplicates records or overwrites customizations.
+     - Expose typed IPC bridges (`window.opsreport.categories`, `window.opsreport.templates`) with corresponding Electron and InMemory client services for seamless testability.
+     - Activate the `Templates & Categories` view in the shell navigation with two dedicated tabs, search, filtering, accessible modals, and honest notices clarifying that physical template file storage/import belongs to Step 17 Vault.
+  2. *Option B:* Store categories as client-side constants in React, simulate fake document import before the vault exists, allow cascade deletion of categories, or store templates directly as database BLOBs. (REJECTED - Violates data integrity, creates mock file synchronization problems, and violates scope boundaries).
+* **Risks & Dependencies:** Future Step 16 (Report Session Persistence) and Step 17 (Template Vault) will build directly on these category IDs and template metadata IDs.
+* **Evidence Needed:** Step 15 Completion Report (`STEP_15_CATEGORY_AND_TEMPLATE_REPORT.md`), `OPSREPORT_STUDIO_DATABASE_SCHEMA.md`.
+* **Decision Owner:** Senior Desktop Application Engineer / Senior Database Architect.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Versioned Migration 002, Relational Restrict Integrity, Dual Registry & Honest Metadata Presentation)**.
+
+---
+
+### DEC-038: Report Session Data Model, Frozen Station Snapshots & Draft Recovery Architecture
+* **Question:** How should report sessions, partial drafts, dynamic category payloads, and associated station lists be modeled and persisted for Step 16?
+* **Why It Matters:** Control-room operators frequently draft reports across shifts or experience application interruptions. If station reordering or renaming in global settings mutates historical drafts, report consistency is corrupted. If incomplete form data is unpersisted or stored without transactional boundaries, operators lose vital inspection findings.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Maintain an authoritative, versioned relational schema in SQLite via Migration 003 (`003_report_session_and_draft_persistence.ts`) advancing schema to version 3.
+     - Establish `report_sessions` table with stable branded identifier (`ReportSessionId`), foreign key references to `report_categories(category_id)` (`ON DELETE RESTRICT`) and `template_metadata(template_id)` (`ON DELETE SET NULL`), explicit lifecycle status (`DRAFT`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`), schema versioning (`payload_version`), serialized JSON draft payload (`form_data`), and consistent ISO 8601 UTC timestamps.
+     - Implement `report_session_stations` junction table capturing an immutable frozen station snapshot (`DEC-025`) preserving sequence order, station name, and station code at the time of drafting. Reordering canonical stations in global settings does not mutate session snapshots.
+     - Enforce referential integrity: reject category or station deletions if referenced by report sessions; cascade session deletion cleanly to associated station snapshots.
+     - Expose typed `SessionRepository` providing atomic transaction-backed `createSession`, `getSessionById`, `updateSessionDraft`, `getResumableSessions`, `getAllSessions`, and `deleteSession`.
+     - Expose typed IPC bridge (`window.opsreport.sessions`) and dual-mode client (`ElectronSessionClient`, `InMemorySessionClient`).
+     - Strictly exclude report-entry forms (Steps 34–36), autosave UI (Step 38), and document generation engines (Steps 26–33, 40) from Step 16 scope.
+  2. *Option B:* Store drafts in browser `localStorage`, create competing JSON files on disk, store dynamic station queries without frozen snapshots, or build premature UI editors. (REJECTED - Prone to silent data corruption, historical data mutations, and scope violation).
+* **Risks & Dependencies:** Future Step 34–36 report entry forms and Step 38 draft recovery UI will consume `SessionRepository` and `SessionClient` without modifying the underlying persistence schema.
+* **Evidence Needed:** Step 16 Completion Report (`STEP_16_REPORT_SESSION_PERSISTENCE_REPORT.md`), `OPSREPORT_STUDIO_DATABASE_SCHEMA.md`.
+* **Decision Owner:** Senior Database Architect / Senior Application Engineer / Senior Data Integrity Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Versioned Migration 003, Relational Integrity, Frozen Station Snapshots & Transactional Draft Recovery)**.
+
+---
+
+### DEC-039: Master Template Vault, Storage Separation & Filesystem Security
+* **Question:** How should OpsReport Studio organize, initialize, and safeguard application-managed master templates, ephemeral processing scratch files, and generated outputs while protecting original user files and preventing path traversal vulnerabilities?
+* **Why It Matters:** Storing reusable templates in arbitrary user directories or the application installation folder creates security risks, permission failures, and race conditions. Allowing screens or generated reports to write directly into template storage risks overwriting original master documents (`INV-DAT-006`). Path traversal sequences (`..`) or null bytes in template/session identifiers could compromise the host filesystem.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Establish a centralized `VaultManager` singleton owning all application-managed filesystem locations, idempotent directory initialization, and secure path resolution.
+     - Strictly follow the Windows desktop standard `%LOCALAPPDATA%\OpsReportStudio` (with cross-platform fallbacks) and maintain complete logical and physical separation between:
+       - Master Template Vault: `%LOCALAPPDATA%\OpsReportStudio\Templates\`
+       - Ephemeral Scratch Sandbox: `%LOCALAPPDATA%\OpsReportStudio\Scratch\`
+       - Generated Report Outputs: `%LOCALAPPDATA%\OpsReportStudio\Reports\`
+       - Relational Database: `%LOCALAPPDATA%\OpsReportStudio\Database\`
+       - Diagnostic Logs: `%LOCALAPPDATA%\OpsReportStudio\Logs\`
+       - Recovery Backups: `%LOCALAPPDATA%\OpsReportStudio\Backups\`
+     - Use stable internal identifiers (`TemplateId`) as the sole filesystem storage key (`{templateId}.{xlsx|docx}`), keeping editable display names, categories, and station names strictly in database metadata.
+     - Enforce strict filesystem security boundaries: reject null bytes, reject path traversal (`..`), enforce alphanumeric identifier patterns (`^[A-Za-z0-9_-]{1,64}$`), canonicalize paths with case-insensitive boundary checks on Windows (`assertPathInsideRoot`), and assert that report outputs never target the master vault (`assertTargetNotInsideVault`).
+     - Provide automatic startup sweeps of stale `.tmp` files in the scratch directory older than 15 minutes.
+     - Require zero database schema migration (schema remains version 3; Step 15 `template_metadata` already stores `template_id` and `file_name`).
+     - Expose typed IPC bridge (`window.opsreport.vault`) and dual-mode client (`ElectronVaultClient`, `InMemoryVaultClient`).
+     - Integrate vault storage readiness status directly into the existing `TemplatesView.tsx` without creating duplicate screens.
+     - Strictly exclude template file import (Step 18), file parsing, cloning/versioning (Step 19), or document generation engines.
+  2. *Option B:* Store templates inside the application source or install folder, construct arbitrary filesystem paths in React components, use user display names as filenames, or allow output reports to overwrite master templates. (REJECTED - Violates desktop security standards, creates path traversal risks, and violates `INV-DAT-006`).
+* **Risks & Dependencies:** Future Step 18 (Template Import & Validation) and Step 19 (Template Immutability & Cloning) will directly consume `VaultManager` and `VaultClient` for physical file management.
+* **Evidence Needed:** Step 17 Completion Report (`STEP_17_MASTER_TEMPLATE_VAULT_REPORT.md`), `OPSREPORT_STUDIO_FILE_STORAGE_SPECIFICATION.md`.
+* **Decision Owner:** Senior Desktop Application Architect / Senior Filesystem & Storage Engineer / Senior Application Security Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Centralized VaultManager, Physical Storage Separation, Strict Path Confinement & Stable Identifier Resolution)**.
+
+---
+
+### DEC-040: Excel and Word Template Import, Structural Validation & Staged Promotion Pipeline
+* **Question:** How should OpsReport Studio implement user-initiated template selection, file-type inspection, container validation, ephemeral staging, vault promotion, and metadata registration while protecting original user files and preventing corrupted or malicious files from entering the vault?
+* **Why It Matters:** Relying on filename extensions alone risks importing corrupted, empty, or mislabeled documents. Copying unvalidated files directly into the master vault pollutes storage with unusable assets. Failing to isolate processing risks modifying original user documents. Macro-enabled formats (`.xlsm`/`.docm`) introduce severe security vulnerabilities (VBA execution) and brittle stream preservation hazards.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Implement an 8-stage transactional import pipeline orchestrated by `TemplateImporter`:
+       1. *Source Inspection:* Assert source file exists, is a regular file, and is not inside the vault (`assertTargetNotInsideVault`). Original source file remains 100% untouched throughout the lifecycle.
+       2. *Ephemeral Staging:* Copy source bytes into a uniquely named temporary artifact in the `%LOCALAPPDATA%\OpsReportStudio\Scratch\` sandbox (`import_{timestamp}_{random}.tmp`).
+       3. *Open XML Container Validation (`DocumentValidator`):*
+          - Bounded file size: 25 MB max compressed file size; 100 MB max uncompressed expansion; 15:1 decompression ratio ceiling; 1,000 max entries.
+          - Magic byte verification: Enforce standard ZIP signature (`PK\x03\x04`). Explicitly detect and reject legacy binary formats (`.xls`/`.doc`) and password-protected OLE containers (`\xD0\xCF\x11\xE0`) with clear resave guidance.
+          - Container parsing via pure JavaScript `PizZip` engine. Reject truncated or malformed ZIP archives.
+          - Archive security: Block entries with path traversal (`..`, leading slashes).
+          - Macro quarantine (DEC-005, ADR-OPSREPORT-002): Strictly reject archives containing `vbaProject.bin`.
+          - Core parts verification: Require `[Content_Types].xml` and `_rels/.rels`.
+          - Format-specific parts: Require `xl/workbook.xml` for `.xlsx` and `word/document.xml` for `.docx`. Reject extension-to-content mismatches (e.g. Word documents renamed to `.xlsx`).
+          - SHA-256 hash calculation for content tracking and duplicate identification.
+       4. *Category & Format Verification:* Validate category reference and confirm that detected document format matches category mandate.
+       5. *Vault Destination Resolution:* Resolve canonical storage path under `%LOCALAPPDATA%\OpsReportStudio\Templates\` using stable internal identifier (`{templateId}.xlsx` or `{templateId}.docx`).
+       6. *Promotion & Consistency Rollback:* Copy staged file to vault destination. Insert or update metadata in SQLite (`template_metadata`). If database operation fails, immediately unlink the promoted file to prevent orphaned physical files.
+       7. *Guaranteed Cleanup:* Unlink the temporary scratch staging file in a `finally` block.
+     - Expose native desktop file picker via Electron IPC (`dialog.showOpenDialog`) with supported format filters.
+     - Expose typed preload IPC bridge (`window.opsreport.templates.selectFile` and `importTemplate`) and dual-mode client (`ElectronTemplateClient`, `InMemoryTemplateClient`).
+     - Integrate accessible `ImportTemplateModal` into `TemplatesView.tsx` with file selection card, auto-detected format badge, category matching, and clear progress/error feedback.
+     - Strictly exclude master template cloning/versioning (Step 19), mapping wizards (Steps 22–23), or document generation engines.
+  2. *Option B:* Accept any file with `.xlsx`/`.docx` extension without inspecting container internals, copy files directly into the vault without scratch staging, allow macro execution, or modify original user documents in-place. (REJECTED - Violates desktop security standards, creates data loss risks, and violates `INV-DAT-006`).
+* **Risks & Dependencies:** Future Step 19 (Template Immutability & Cloning) and Step 20 (Template Metadata Inspection) will directly consume imported master templates stored in the vault.
+* **Evidence Needed:** Step 18 Completion Report (`STEP_18_TEMPLATE_IMPORT_REPORT.md`), `OPSREPORT_STUDIO_DOCUMENT_COMPATIBILITY_MATRIX.md`.
+* **Decision Owner:** Senior Desktop Application Engineer / Senior Document-Processing Engineer / Senior Filesystem Security Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: 8-Stage Staged Pipeline, Open XML Container Validation, Macro Quarantine, Atomic Rollback & Source Preservation)**.
+
+
+
+
+
 
 
 
