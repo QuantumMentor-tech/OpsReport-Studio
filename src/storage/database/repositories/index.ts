@@ -9,3 +9,7 @@ export * from './category-repository.ts';
 export * from './settings-repository.ts';
 export * from './template-metadata-repository.ts';
 export * from './session-repository.ts';
+export * from './excel-mapping-repository.ts';
+export * from './word-mapping-repository.ts';
+export * from './mapping-profile-repository.ts';
+export * from './template-designer-repository.ts';

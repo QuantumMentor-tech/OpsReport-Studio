@@ -17,16 +17,30 @@ import type { MigrationRecord } from '../types.ts';
 import { migration001 } from './001_initial_schema.ts';
 import { migration002 } from './002_category_lifecycle_and_template_metadata.ts';
 import { migration003 } from './003_report_session_and_draft_persistence.ts';
+import { migration004 } from './004_template_versioning_and_immutability.ts';
+import { migration005 } from './005_excel_template_mappings.ts';
+import { migration006 } from './006_word_template_mappings.ts';
+import { migration007 } from './007_mapping_profiles.ts';
+import { migration008 } from './008_template_designer_drafts.ts';
 import { Result, Ok, Err } from '../../../shared/types/result.ts';
 import { AppError } from '../../../shared/errors/app-error.ts';
 import { ErrorCode } from '../../../shared/errors/error-codes.ts';
 
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /**
  * Ordered list of all registered schema migrations.
  */
-export const ALL_MIGRATIONS: readonly Migration[] = [migration001, migration002, migration003];
+export const ALL_MIGRATIONS: readonly Migration[] = [
+  migration001,
+  migration002,
+  migration003,
+  migration004,
+  migration005,
+  migration006,
+  migration007,
+  migration008,
+];
 
 /**
  * Computes a deterministic SHA-256 checksum for a migration payload.

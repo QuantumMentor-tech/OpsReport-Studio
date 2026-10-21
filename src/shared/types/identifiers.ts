@@ -24,6 +24,9 @@ export type ReportCategoryId = Brand<string, 'ReportCategoryId'>;
 /** Master template identifier in the local template vault */
 export type TemplateId = Brand<string, 'TemplateId'>;
 
+/** Immutable revision identifier for a specific version of a master template */
+export type TemplateVersionId = Brand<string, 'TemplateVersionId'>;
+
 /** Template mapping profile identifier linking fields to Open XML targets */
 export type MappingProfileId = Brand<string, 'MappingProfileId'>;
 
@@ -48,6 +51,9 @@ export const toReportCategoryId = (id: string): ReportCategoryId => id as Report
 
 /** Safely cast a validated string into a TemplateId */
 export const toTemplateId = (id: string): TemplateId => id as TemplateId;
+
+/** Safely cast a validated string into a TemplateVersionId */
+export const toTemplateVersionId = (id: string): TemplateVersionId => id as TemplateVersionId;
 
 /** Safely cast a validated string into a MappingProfileId */
 export const toMappingProfileId = (id: string): MappingProfileId => id as MappingProfileId;

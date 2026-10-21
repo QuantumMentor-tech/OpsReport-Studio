@@ -25,6 +25,8 @@ import type {
   ReportDocumentFormat,
   VaultStorageStatus,
   TemplateFileSelection,
+  TemplateHealthRecord,
+  TemplateSortOption,
 } from '../../shared/types.ts';
 import { toReportCategoryId } from '../../shared/types/identifiers.ts';
 import { PageHeader } from '../components/common/PageHeader.tsx';
@@ -35,6 +37,13 @@ import { EmptyState } from '../components/common/EmptyState.tsx';
 import { getCategoryClient } from '../services/category-client.ts';
 import { getTemplateClient } from '../services/template-client.ts';
 import { getVaultClient } from '../services/vault-client.ts';
+import { TemplateInspectModal } from '../components/templates/TemplateInspectModal.tsx';
+import { ReplaceTemplateModal } from '../components/templates/ReplaceTemplateModal.tsx';
+import { TemplateRecoveryModal } from '../components/templates/TemplateRecoveryModal.tsx';
+import { ExcelMappingWizardModal } from '../components/templates/ExcelMappingWizardModal.tsx';
+import { WordMappingWizardModal } from '../components/templates/WordMappingWizardModal.tsx';
+import { MappingProfilesModal } from '../components/templates/MappingProfilesModal.tsx';
+import { TemplateDesignerModal } from '../components/templates/TemplateDesignerModal.tsx';
 
 const BUILTIN_IDS = new Set([
   'RPT-INCIDENT',
@@ -79,7 +88,14 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
   const [isTplLoading, setIsTplLoading] = useState<boolean>(true);
   const [tplCategoryFilter, setTplCategoryFilter] = useState<string>('ALL');
   const [tplStatusFilter, setTplStatusFilter] = useState<string>('ALL');
+  const [tplFormatFilter, setTplFormatFilter] = useState<string>('ALL');
+  const [tplHealthFilter, setTplHealthFilter] = useState<string>('ALL');
+  const [tplSortOption, setTplSortOption] = useState<TemplateSortOption>('NAME_ASC');
   const [tplSearchQuery, setTplSearchQuery] = useState<string>('');
+
+  // Step 21 Health tracking state
+  const [healthMap, setHealthMap] = useState<Map<string, TemplateHealthRecord>>(new Map());
+  const [isCheckingHealth, setIsCheckingHealth] = useState<boolean>(false);
 
   // Template modal state
   const [isTplModalOpen, setIsTplModalOpen] = useState<boolean>(false);
@@ -93,9 +109,18 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
   const [tplFormDesc, setTplFormDesc] = useState<string>('');
   const [tplFormError, setTplFormError] = useState<string | null>(null);
 
-  // Template delete state
+  // Step 21 Replacement & Recovery modal state
+  const [isReplaceModalOpen, setIsReplaceModalOpen] = useState<boolean>(false);
+  const [templateToReplace, setTemplateToReplace] = useState<TemplateMetadataRecord | null>(null);
+
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState<boolean>(false);
+  const [templateToRecover, setTemplateToRecover] = useState<TemplateMetadataRecord | null>(null);
+
+  // Template delete & session dependency state
   const [isTplDeleteModalOpen, setIsTplDeleteModalOpen] = useState<boolean>(false);
   const [templateToDelete, setTemplateToDelete] = useState<TemplateMetadataRecord | null>(null);
+  const [deleteDependencyCount, setDeleteDependencyCount] = useState<number | null>(null);
+  const [isCheckingDependencies, setIsCheckingDependencies] = useState<boolean>(false);
 
   // Template import state (Step 18)
   const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
@@ -106,6 +131,27 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
   const [importFormDesc, setImportFormDesc] = useState<string>('');
   const [importFormError, setImportFormError] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState<boolean>(false);
+
+  // Template inspection state (Step 20)
+  const [isInspectModalOpen, setIsInspectModalOpen] = useState<boolean>(false);
+  const [inspectingTemplate, setInspectingTemplate] = useState<TemplateMetadataRecord | null>(null);
+
+  // Step 22 Excel mapping wizard state
+  const [isExcelWizardOpen, setIsExcelWizardOpen] = useState<boolean>(false);
+  const [templateToMap, setTemplateToMap] = useState<TemplateMetadataRecord | null>(null);
+
+  // Step 23 Word mapping wizard state
+  const [isWordWizardOpen, setIsWordWizardOpen] = useState<boolean>(false);
+  const [wordTemplateToMap, setWordTemplateToMap] = useState<TemplateMetadataRecord | null>(null);
+
+  // Step 24 Mapping Profiles & Validation state
+  const [isProfilesModalOpen, setIsProfilesModalOpen] = useState<boolean>(false);
+  const [templateForProfiles, setTemplateForProfiles] = useState<TemplateMetadataRecord | null>(
+    null
+  );
+
+  // Step 25 In-App Template Designer state
+  const [isDesignerModalOpen, setIsDesignerModalOpen] = useState<boolean>(false);
 
   // Global messages
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -152,6 +198,19 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
       const res = await templateClient.getAll({ categoryId: catFilter, status: statFilter });
       if (res.ok) {
         setTemplates(res.value);
+        // Query health records for all templates
+        try {
+          const healthRes = await templateClient.checkAllHealth();
+          if (healthRes.ok) {
+            const hMap = new Map<string, TemplateHealthRecord>();
+            for (const h of healthRes.value) {
+              hMap.set(h.templateId, h);
+            }
+            setHealthMap(hMap);
+          }
+        } catch {
+          // Health query is non-blocking
+        }
       } else {
         setErrorMessage(res.error.userMessage || 'Failed to load template metadata.');
       }
@@ -371,8 +430,57 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
           (t.description && t.description.toLowerCase().includes(q))
       );
     }
-    return list;
-  }, [templates, tplSearchQuery]);
+
+    if (tplFormatFilter !== 'ALL') {
+      list = list.filter(t => t.document_type === tplFormatFilter);
+    }
+
+    if (tplHealthFilter !== 'ALL') {
+      list = list.filter(t => {
+        const h = healthMap.get(t.template_id);
+        if (tplHealthFilter === 'HEALTHY') {
+          return h?.status === 'OK';
+        }
+        if (tplHealthFilter === 'PROBLEM') {
+          return h && h.status !== 'OK';
+        }
+        return true;
+      });
+    }
+
+    const sorted = [...list];
+    sorted.sort((a, b) => {
+      switch (tplSortOption) {
+        case 'NAME_ASC':
+          return a.template_name.localeCompare(b.template_name);
+        case 'NAME_DESC':
+          return b.template_name.localeCompare(a.template_name);
+        case 'CATEGORY_ASC': {
+          const catA = categoryMap.get(a.category_id)?.display_name || a.category_id;
+          const catB = categoryMap.get(b.category_id)?.display_name || b.category_id;
+          return catA.localeCompare(catB);
+        }
+        case 'FORMAT_ASC':
+          return a.document_type.localeCompare(b.document_type);
+        case 'UPDATED_DESC':
+          return (b.updated_at || '').localeCompare(a.updated_at || '');
+        case 'CREATED_DESC':
+          return (b.created_at || '').localeCompare(a.created_at || '');
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [
+    templates,
+    tplSearchQuery,
+    tplFormatFilter,
+    tplHealthFilter,
+    tplSortOption,
+    healthMap,
+    categoryMap,
+  ]);
 
   const openAddTemplateModal = () => {
     setTplModalMode('add');
@@ -398,6 +506,11 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
     setTplFormDesc(tpl.description || '');
     setTplFormError(null);
     setIsTplModalOpen(true);
+  };
+
+  const openInspectModal = (tpl: TemplateMetadataRecord) => {
+    setInspectingTemplate(tpl);
+    setIsInspectModalOpen(true);
   };
 
   const handleSaveTemplate = async (e: React.FormEvent) => {
@@ -482,9 +595,67 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
     }
   };
 
-  const openDeleteTemplateModal = (tpl: TemplateMetadataRecord) => {
+  const openDeleteTemplateModal = async (tpl: TemplateMetadataRecord) => {
     setTemplateToDelete(tpl);
+    setDeleteDependencyCount(null);
+    setIsCheckingDependencies(true);
     setIsTplDeleteModalOpen(true);
+    try {
+      const res = await templateClient.getDependencyCount(tpl.template_id);
+      if (res.ok) {
+        setDeleteDependencyCount(res.value.sessionCount);
+      } else {
+        setDeleteDependencyCount(0);
+      }
+    } catch {
+      setDeleteDependencyCount(0);
+    } finally {
+      setIsCheckingDependencies(false);
+    }
+  };
+
+  const openReplaceModal = (tpl: TemplateMetadataRecord) => {
+    setTemplateToReplace(tpl);
+    setIsReplaceModalOpen(true);
+  };
+
+  const openRecoveryModal = (tpl: TemplateMetadataRecord) => {
+    setTemplateToRecover(tpl);
+    setIsRecoveryModalOpen(true);
+  };
+
+  const openExcelWizard = (tpl: TemplateMetadataRecord) => {
+    setTemplateToMap(tpl);
+    setIsExcelWizardOpen(true);
+  };
+
+  const openWordWizard = (tpl: TemplateMetadataRecord) => {
+    setWordTemplateToMap(tpl);
+    setIsWordWizardOpen(true);
+  };
+
+  const openProfilesModal = (tpl: TemplateMetadataRecord) => {
+    setTemplateForProfiles(tpl);
+    setIsProfilesModalOpen(true);
+  };
+
+  const handleRefreshHealth = async () => {
+    setIsCheckingHealth(true);
+    try {
+      const healthRes = await templateClient.checkAllHealth();
+      if (healthRes.ok) {
+        const hMap = new Map<string, TemplateHealthRecord>();
+        for (const h of healthRes.value) {
+          hMap.set(h.templateId, h);
+        }
+        setHealthMap(hMap);
+        setSuccessMessage('Template vault health verification complete.');
+      }
+    } catch (err) {
+      setErrorMessage(`Health check error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setIsCheckingHealth(false);
+    }
   };
 
   const handleConfirmDeleteTemplate = async () => {
@@ -493,7 +664,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
     try {
       const res = await templateClient.delete(templateToDelete.template_id);
       if (res.ok) {
-        setSuccessMessage(`Template "${templateToDelete.template_name}" removed.`);
+        setSuccessMessage(`Template "${templateToDelete.template_name}" permanently removed.`);
         setIsTplDeleteModalOpen(false);
         setTemplateToDelete(null);
         await loadTemplates();
@@ -635,6 +806,13 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
               <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
                 <Button
                   variant="primary"
+                  onClick={() => setIsDesignerModalOpen(true)}
+                  disabled={isSaving || isTplLoading}
+                >
+                  🎨 Template Designer
+                </Button>
+                <Button
+                  variant="secondary"
                   onClick={openImportModal}
                   disabled={isSaving || isTplLoading}
                 >
@@ -1145,6 +1323,24 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
               </select>
 
               <select
+                value={tplFormatFilter}
+                aria-label="Filter templates by document format"
+                onChange={e => setTplFormatFilter(e.target.value)}
+                style={{
+                  padding: 'var(--space-2) var(--space-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                <option value="ALL">All Formats</option>
+                <option value="EXCEL_XLSX">Excel (.xlsx)</option>
+                <option value="WORD_DOCX">Word (.docx)</option>
+              </select>
+
+              <select
                 value={tplStatusFilter}
                 aria-label="Filter templates by status"
                 onChange={e => setTplStatusFilter(e.target.value)}
@@ -1162,6 +1358,55 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                 <option value="DRAFT">Draft</option>
                 <option value="ARCHIVED">Archived</option>
               </select>
+
+              <select
+                value={tplHealthFilter}
+                aria-label="Filter templates by health condition"
+                onChange={e => setTplHealthFilter(e.target.value)}
+                style={{
+                  padding: 'var(--space-2) var(--space-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                <option value="ALL">All Health States</option>
+                <option value="HEALTHY">Healthy (Intact)</option>
+                <option value="PROBLEM">Needs Recovery / Attention</option>
+              </select>
+
+              <select
+                value={tplSortOption}
+                aria-label="Sort template library deterministically"
+                onChange={e => setTplSortOption(e.target.value as TemplateSortOption)}
+                style={{
+                  padding: 'var(--space-2) var(--space-3)',
+                  fontSize: 'var(--font-size-sm)',
+                  borderRadius: 'var(--radius-md)',
+                  border: '1px solid var(--color-border)',
+                  backgroundColor: 'var(--color-surface)',
+                  color: 'var(--color-text-primary)',
+                }}
+              >
+                <option value="NAME_ASC">Name (A – Z)</option>
+                <option value="NAME_DESC">Name (Z – A)</option>
+                <option value="CATEGORY_ASC">Category (A – Z)</option>
+                <option value="FORMAT_ASC">Document Format</option>
+                <option value="UPDATED_DESC">Recently Updated</option>
+                <option value="CREATED_DESC">Recently Created</option>
+              </select>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleRefreshHealth}
+                disabled={isCheckingHealth}
+                aria-label="Re-verify template vault health"
+              >
+                {isCheckingHealth ? 'Verifying...' : 'Re-verify Health'}
+              </Button>
             </div>
 
             <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}>
@@ -1431,18 +1676,67 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                         >
                           {tpl.file_name ? (
                             <div>
-                              <code
+                              <div
                                 style={{
-                                  fontSize: 'var(--font-size-xs)',
-                                  color: 'var(--color-text-primary)',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 'var(--space-2)',
                                 }}
                               >
-                                {tpl.file_name}
-                              </code>
+                                <code
+                                  style={{
+                                    fontSize: 'var(--font-size-xs)',
+                                    color: 'var(--color-text-primary)',
+                                  }}
+                                >
+                                  {tpl.file_name}
+                                </code>
+                                <Badge variant="neutral">v{tpl.total_versions ?? 1}</Badge>
+                              </div>
                               <div
-                                style={{ fontSize: '10px', color: 'var(--color-text-secondary)' }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 'var(--space-2)',
+                                  marginTop: '4px',
+                                }}
                               >
-                                Metadata registered • Vault import pending (Step 17)
+                                {healthMap.has(tpl.template_id) ? (
+                                  (() => {
+                                    const h = healthMap.get(tpl.template_id)!;
+                                    return (
+                                      <Badge
+                                        variant={
+                                          h.status === 'OK'
+                                            ? 'success'
+                                            : h.status === 'NO_ACTIVE_VERSION'
+                                              ? 'warning'
+                                              : 'error'
+                                        }
+                                      >
+                                        {h.status === 'OK'
+                                          ? '✓ Intact'
+                                          : h.status === 'MISSING_FILE'
+                                            ? '⚠ File Missing'
+                                            : h.status === 'INTEGRITY_MISMATCH'
+                                              ? '⚠ Integrity Mismatch'
+                                              : '⚠ No Active Version'}
+                                      </Badge>
+                                    );
+                                  })()
+                                ) : (
+                                  <Badge variant="neutral">Checking...</Badge>
+                                )}
+                                <span
+                                  style={{
+                                    fontSize: '10px',
+                                    color: 'var(--color-text-secondary)',
+                                  }}
+                                >
+                                  {tpl.active_version_id
+                                    ? `Active: ${tpl.active_version_id}`
+                                    : 'Immutable revision'}
+                                </span>
                               </div>
                             </div>
                           ) : (
@@ -1465,7 +1759,54 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                             textAlign: 'right',
                           }}
                         >
-                          <div style={{ display: 'inline-flex', gap: 'var(--space-2)' }}>
+                          <div
+                            style={{
+                              display: 'inline-flex',
+                              gap: 'var(--space-2)',
+                              flexWrap: 'wrap',
+                              justifyContent: 'flex-end',
+                            }}
+                          >
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => openInspectModal(tpl)}
+                              aria-label={`Inspect ${tpl.template_name}`}
+                              disabled={isSaving}
+                            >
+                              Inspect
+                            </Button>
+                            {tpl.document_type === 'EXCEL_XLSX' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openExcelWizard(tpl)}
+                                aria-label={`Configure Excel mappings for ${tpl.template_name}`}
+                                disabled={isSaving}
+                              >
+                                Map Excel
+                              </Button>
+                            )}
+                            {tpl.document_type === 'WORD_DOCX' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openWordWizard(tpl)}
+                                aria-label={`Configure Word mappings for ${tpl.template_name}`}
+                                disabled={isSaving}
+                              >
+                                Map Word
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openProfilesModal(tpl)}
+                              aria-label={`View mapping profiles and validation for ${tpl.template_name}`}
+                              disabled={isSaving}
+                            >
+                              Profiles
+                            </Button>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -1474,6 +1815,15 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                               disabled={isSaving}
                             >
                               Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openReplaceModal(tpl)}
+                              aria-label={`Replace master file for ${tpl.template_name}`}
+                              disabled={isSaving}
+                            >
+                              Replace
                             </Button>
                             <Button
                               variant="ghost"
@@ -1489,6 +1839,18 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                             >
                               {tpl.status === 'ACTIVE' ? 'Archive' : 'Activate'}
                             </Button>
+                            {healthMap.has(tpl.template_id) &&
+                              healthMap.get(tpl.template_id)!.status !== 'OK' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => openRecoveryModal(tpl)}
+                                  aria-label={`Recover ${tpl.template_name}`}
+                                  disabled={isSaving}
+                                >
+                                  Recover
+                                </Button>
+                              )}
                             <Button
                               variant="danger"
                               size="sm"
@@ -1920,7 +2282,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                   onChange={e => {
                     setTplFormCategoryId(e.target.value);
                     const selectedCat = categoryMap.get(e.target.value);
-                    if (selectedCat) {
+                    if (selectedCat && tplModalMode === 'add') {
                       setTplFormDocType(selectedCat.default_format);
                     }
                   }}
@@ -1934,12 +2296,33 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                     color: 'var(--color-text-primary)',
                   }}
                 >
-                  {categories.map(c => (
-                    <option key={c.category_id} value={c.category_id}>
-                      {c.display_name} ({c.default_format === 'WORD_DOCX' ? 'Word' : 'Excel'})
-                    </option>
-                  ))}
+                  {categories
+                    .filter(
+                      c =>
+                        tplModalMode === 'add' ||
+                        c.default_format === editingTemplate?.document_type
+                    )
+                    .map(c => (
+                      <option key={c.category_id} value={c.category_id}>
+                        {c.display_name} ({c.default_format === 'WORD_DOCX' ? 'Word' : 'Excel'})
+                      </option>
+                    ))}
                 </select>
+                {tplModalMode === 'edit' && (
+                  <div
+                    style={{
+                      fontSize: '11px',
+                      color: 'var(--color-text-secondary)',
+                      marginTop: '4px',
+                    }}
+                  >
+                    Only categories supporting{' '}
+                    {editingTemplate?.document_type === 'WORD_DOCX'
+                      ? 'Word (.docx)'
+                      : 'Excel (.xlsx)'}{' '}
+                    are permitted.
+                  </div>
+                )}
               </div>
 
               <div
@@ -1958,6 +2341,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                   </label>
                   <select
                     value={tplFormDocType}
+                    disabled={tplModalMode === 'edit'}
                     onChange={e => setTplFormDocType(e.target.value as ReportDocumentFormat)}
                     style={{
                       width: '100%',
@@ -1965,13 +2349,28 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                       fontSize: 'var(--font-size-sm)',
                       borderRadius: 'var(--radius-md)',
                       border: '1px solid var(--color-border)',
-                      backgroundColor: 'var(--color-surface)',
+                      backgroundColor:
+                        tplModalMode === 'edit'
+                          ? 'var(--color-surface-hover)'
+                          : 'var(--color-surface)',
                       color: 'var(--color-text-primary)',
+                      cursor: tplModalMode === 'edit' ? 'not-allowed' : 'default',
                     }}
                   >
                     <option value="EXCEL_XLSX">Excel Spreadsheet (.xlsx)</option>
                     <option value="WORD_DOCX">Word Document (.docx)</option>
                   </select>
+                  {tplModalMode === 'edit' && (
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: 'var(--color-text-secondary)',
+                        marginTop: '2px',
+                      }}
+                    >
+                      Format is immutable. Use "Replace" to update master files safely.
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -2018,6 +2417,7 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                 </label>
                 <input
                   type="text"
+                  disabled={tplModalMode === 'edit'}
                   value={tplFormFileName}
                   onChange={e => setTplFormFileName(e.target.value)}
                   placeholder="e.g. station_light_inspection_master.xlsx"
@@ -2027,8 +2427,12 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 'var(--radius-md)',
                     border: '1px solid var(--color-border)',
-                    backgroundColor: 'var(--color-surface)',
+                    backgroundColor:
+                      tplModalMode === 'edit'
+                        ? 'var(--color-surface-hover)'
+                        : 'var(--color-surface)',
                     color: 'var(--color-text-primary)',
+                    cursor: tplModalMode === 'edit' ? 'not-allowed' : 'text',
                   }}
                 />
                 <div
@@ -2038,7 +2442,9 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                     marginTop: 'var(--space-1)',
                   }}
                 >
-                  Note: Physical file import and binary parsing are handled in Step 17 Vault.
+                  {tplModalMode === 'edit'
+                    ? 'Physical vault filenames are managed by the versioning system.'
+                    : 'Note: Physical file import and binary parsing are handled in Step 17 Vault.'}
                 </div>
               </div>
 
@@ -2142,33 +2548,110 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
                 marginBottom: 'var(--space-3)',
               }}
             >
-              Delete Template Metadata?
+              {deleteDependencyCount !== null && deleteDependencyCount > 0
+                ? 'Permanent Deletion Blocked'
+                : 'Delete Template Metadata?'}
             </h2>
-            <p
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-secondary)',
-                lineHeight: 1.5,
-                marginBottom: 'var(--space-6)',
-              }}
-            >
-              Are you sure you want to permanently delete template metadata for{' '}
-              <strong>"{templateToDelete.template_name}"</strong> ({templateToDelete.template_id})?
-            </p>
+
+            {isCheckingDependencies ? (
+              <p
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                  lineHeight: 1.5,
+                  marginBottom: 'var(--space-6)',
+                }}
+              >
+                Checking operational report session dependencies...
+              </p>
+            ) : deleteDependencyCount !== null && deleteDependencyCount > 0 ? (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 'var(--space-3)',
+                  marginBottom: 'var(--space-6)',
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid var(--color-error)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: 'var(--space-3)',
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-primary)',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <strong>Cannot permanently delete:</strong> Template{' '}
+                  <strong>"{templateToDelete.template_name}"</strong> is referenced by{' '}
+                  <strong>{deleteDependencyCount}</strong> historical report session(s). Permanent
+                  deletion is prohibited to protect audit trails and prevent report corruption.
+                </div>
+                <p
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                    lineHeight: 1.5,
+                    margin: 0,
+                  }}
+                >
+                  <strong>Recommended Action:</strong> Archive this template instead. Archiving
+                  retains historical records while removing the template from active report
+                  generation.
+                </p>
+              </div>
+            ) : (
+              <p
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                  lineHeight: 1.5,
+                  marginBottom: 'var(--space-6)',
+                }}
+              >
+                Are you sure you want to permanently delete template metadata for{' '}
+                <strong>"{templateToDelete.template_name}"</strong> ({templateToDelete.template_id}
+                )? This template has 0 session references. Master vault files will also be removed.
+              </p>
+            )}
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--space-3)' }}>
               <Button
                 variant="secondary"
                 onClick={() => {
                   setIsTplDeleteModalOpen(false);
                   setTemplateToDelete(null);
+                  setDeleteDependencyCount(null);
                 }}
                 disabled={isSaving}
               >
                 Cancel
               </Button>
-              <Button variant="danger" onClick={handleConfirmDeleteTemplate} disabled={isSaving}>
-                {isSaving ? 'Deleting...' : 'Confirm Delete'}
-              </Button>
+              {deleteDependencyCount !== null && deleteDependencyCount > 0 ? (
+                <Button
+                  variant="primary"
+                  onClick={async () => {
+                    if (templateToDelete) {
+                      await handleUpdateTemplateStatus(templateToDelete, 'ARCHIVED');
+                      setIsTplDeleteModalOpen(false);
+                      setTemplateToDelete(null);
+                    }
+                  }}
+                  disabled={isSaving}
+                >
+                  Archive Template Instead
+                </Button>
+              ) : (
+                <Button
+                  variant="danger"
+                  onClick={handleConfirmDeleteTemplate}
+                  disabled={isSaving || isCheckingDependencies}
+                >
+                  {isSaving ? 'Deleting...' : 'Confirm Delete'}
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -2558,6 +3041,106 @@ export const TemplatesView: React.FC<TemplatesViewProps> = ({ initialTab = 'cate
           </div>
         </div>
       )}
+
+      {/* Template Inspection Modal (Step 20) */}
+      <TemplateInspectModal
+        isOpen={isInspectModalOpen}
+        template={inspectingTemplate}
+        categoryMap={categoryMap}
+        onClose={() => {
+          setIsInspectModalOpen(false);
+          setInspectingTemplate(null);
+        }}
+        onOpenExcelWizard={openExcelWizard}
+        onOpenWordWizard={openWordWizard}
+        onOpenProfilesModal={openProfilesModal}
+      />
+
+      {/* Template Replacement Modal (Step 21) */}
+      <ReplaceTemplateModal
+        isOpen={isReplaceModalOpen}
+        template={templateToReplace}
+        onClose={() => {
+          setIsReplaceModalOpen(false);
+          setTemplateToReplace(null);
+        }}
+        onSuccess={msg => {
+          setIsReplaceModalOpen(false);
+          setTemplateToReplace(null);
+          setSuccessMessage(msg);
+          loadTemplates();
+        }}
+      />
+
+      {/* Template Recovery Modal (Step 21) */}
+      <TemplateRecoveryModal
+        isOpen={isRecoveryModalOpen}
+        template={templateToRecover}
+        onClose={() => {
+          setIsRecoveryModalOpen(false);
+          setTemplateToRecover(null);
+        }}
+        onSuccess={msg => {
+          setIsRecoveryModalOpen(false);
+          setTemplateToRecover(null);
+          setSuccessMessage(msg);
+          loadTemplates();
+        }}
+      />
+
+      {/* Excel Worksheet, Header Row & Cell Mapping Wizard (Step 22) */}
+      <ExcelMappingWizardModal
+        isOpen={isExcelWizardOpen}
+        template={templateToMap}
+        categoryMap={categoryMap}
+        onClose={() => {
+          setIsExcelWizardOpen(false);
+          setTemplateToMap(null);
+        }}
+        onSaved={() => {
+          loadTemplates();
+        }}
+      />
+
+      {/* Word Placeholder, Paragraph & Table Mapping Wizard (Step 23) */}
+      <WordMappingWizardModal
+        isOpen={isWordWizardOpen}
+        template={wordTemplateToMap}
+        categoryMap={categoryMap}
+        onClose={() => {
+          setIsWordWizardOpen(false);
+          setWordTemplateToMap(null);
+        }}
+        onSaved={() => {
+          loadTemplates();
+        }}
+      />
+
+      {/* Mapping Profiles, Field Validation & Template Compatibility (Step 24) */}
+      <MappingProfilesModal
+        isOpen={isProfilesModalOpen}
+        template={templateForProfiles}
+        categoryMap={categoryMap}
+        onClose={() => {
+          setIsProfilesModalOpen(false);
+          setTemplateForProfiles(null);
+        }}
+        onOpenExcelWizard={openExcelWizard}
+        onOpenWordWizard={openWordWizard}
+      />
+
+      {/* In-App Excel and Word Template Designer (Step 25) */}
+      <TemplateDesignerModal
+        isOpen={isDesignerModalOpen}
+        categories={categories}
+        templates={templates}
+        onClose={() => setIsDesignerModalOpen(false)}
+        onTemplateCreated={() => {
+          setIsDesignerModalOpen(false);
+          setSuccessMessage('New template created successfully and registered into library.');
+          loadTemplates();
+        }}
+      />
     </div>
   );
 };

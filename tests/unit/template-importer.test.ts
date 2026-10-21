@@ -168,7 +168,7 @@ describe('OpsReport Studio — Template Importer Pipeline (Step 18)', () => {
         'Station Light Inspection Master (Revised)'
       );
       expect(fs.existsSync(importRes.value.vaultPath)).toBe(true);
-      expect(path.basename(importRes.value.vaultPath)).toBe('TPL-STATION-LIGHT-STANDARD.xlsx');
+      expect(path.basename(importRes.value.vaultPath)).toBe('TPL-STATION-LIGHT-STANDARD_v2.xlsx');
     }
   });
 

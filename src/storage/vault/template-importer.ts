@@ -20,7 +20,10 @@ import type {
   ImportTemplateOptions,
   TemplateImportResult,
   TemplateMetadataRecord,
+  ReplaceTemplateOptions,
+  ReplaceTemplateResult,
 } from '../../shared/types/templates.ts';
+import type { ReportDocumentFormat } from '../../shared/types/categories.ts';
 import { toTemplateId, toReportCategoryId } from '../../shared/types/identifiers.ts';
 import { Result, Ok, Err } from '../../shared/types/result.ts';
 import { AppError } from '../../shared/errors/app-error.ts';
@@ -200,27 +203,58 @@ export class TemplateImporter {
         );
 
       const targetExt = documentType === 'EXCEL_XLSX' ? '.xlsx' : '.docx';
-      const vaultPathRes = this.vaultManager.resolveTemplateVaultPath(templateId, targetExt);
+      const existingTplRes = this.templateRepo.getTemplateById(templateId);
+      const isUpdate = existingTplRes.ok && existingTplRes.value !== null;
+
+      let versionNumber = 1;
+      let targetVaultFilename: string;
+
+      if (isUpdate) {
+        // Multi-version: Allocate distinct filename so historical versions are never overwritten
+        const versionsRes = this.templateRepo.getVersionsByTemplateId(templateId);
+        const currentCount = versionsRes.ok ? versionsRes.value.length : 0;
+        versionNumber = currentCount + 1;
+        targetVaultFilename = `${templateId}_v${versionNumber}${targetExt}`;
+      } else {
+        // Initial version: Use stable templateId as filename
+        targetVaultFilename = `${templateId}${targetExt}`;
+      }
+
+      const vaultPathRes = this.vaultManager.resolveTemplateFileVaultPath(targetVaultFilename);
       if (!vaultPathRes.ok) {
         return vaultPathRes;
       }
       targetVaultPath = vaultPathRes.value;
 
+      // Invariant: Master version destination must never overwrite an existing file
+      if (fs.existsSync(targetVaultPath)) {
+        // If file exists from prior run, allocate unique versioned name to avoid collision
+        versionNumber = Date.now();
+        targetVaultFilename = `${templateId}_v${versionNumber}${targetExt}`;
+        const fallbackPathRes = this.vaultManager.resolveTemplateFileVaultPath(targetVaultFilename);
+        if (!fallbackPathRes.ok) {
+          return fallbackPathRes;
+        }
+        targetVaultPath = fallbackPathRes.value;
+      }
+
       // Stage 7: Promote staged file into Master Template Vault
       fs.copyFileSync(stagedPath, targetVaultPath);
 
-      // Stage 8: Register or update metadata in SQLite
-      const existingTplRes = this.templateRepo.getTemplateById(templateId);
+      // Defense-in-depth: set filesystem read-only attribute on the accepted master file
+      this.vaultManager.makeFileReadOnly(targetVaultPath);
+
+      // Stage 8: Register or update metadata and immutable version in SQLite
       let metadataRecord: TemplateMetadataRecord;
 
-      if (existingTplRes.ok && existingTplRes.value) {
+      if (isUpdate) {
         // Update existing metadata record
         const updateRes = this.templateRepo.updateTemplate(templateId, {
           templateName: templateName.trim(),
           categoryId: toReportCategoryId(categoryId),
           documentType,
           description: options.description ?? null,
-          fileName: path.basename(targetVaultPath),
+          fileName: targetVaultFilename,
           status: 'ACTIVE',
         });
         if (!updateRes.ok) {
@@ -235,7 +269,7 @@ export class TemplateImporter {
           categoryId: toReportCategoryId(categoryId),
           documentType,
           description: options.description ?? null,
-          fileName: path.basename(targetVaultPath),
+          fileName: targetVaultFilename,
           status: 'ACTIVE',
         });
         if (!createRes.ok) {
@@ -244,8 +278,28 @@ export class TemplateImporter {
         metadataRecord = createRes.value;
       }
 
+      // Register immutable version in template_versions table
+      const versionRegRes = this.templateRepo.registerNewVersion({
+        templateId,
+        fileName: targetVaultFilename,
+        sha256Hash: validation.sha256Hash,
+        fileSizeBytes: validation.fileSizeBytes,
+        changeSummary: isUpdate
+          ? 'Updated master template via file import'
+          : 'Initial template import',
+        setActive: true,
+      });
+
+      if (!versionRegRes.ok) {
+        throw versionRegRes.error;
+      }
+
       return Ok({
-        template: metadataRecord,
+        template: {
+          ...metadataRecord,
+          active_version_id: versionRegRes.value.version_id,
+          total_versions: versionRegRes.value.version_number,
+        },
         vaultPath: targetVaultPath,
         fileSizeBytes: validation.fileSizeBytes,
         sha256Hash: validation.sha256Hash,
@@ -281,6 +335,212 @@ export class TemplateImporter {
           fs.unlinkSync(stagedPath);
         } catch {
           // Staging sweep will clean up on next startup
+        }
+      }
+    }
+  }
+
+  /**
+   * Replaces an existing template through a controlled, non-destructive workflow (Step 21 Objective C):
+   * 1. Unambiguously identifies target logical template
+   * 2. Validates source file existence & non-vault residency
+   * 3. Enforces strict format compatibility (.xlsx -> .xlsx, .docx -> .docx)
+   * 4. Stages and validates Open XML container via DocumentValidator
+   * 5. Allocates next sequential version number and distinct vault filename
+   * 6. Preserves existing master files (historical versions untouched)
+   * 7. Sets read-only mode on newly promoted master file
+   * 8. Registers new immutable version and sets it active in atomic transaction
+   * 9. Cleans up scratch staging artifact in finally block
+   */
+  public async replaceTemplate(
+    options: ReplaceTemplateOptions
+  ): Promise<Result<ReplaceTemplateResult, AppError>> {
+    let stagedPath: string | null = null;
+    let targetVaultPath: string | null = null;
+
+    try {
+      // 1. Unambiguously identify target template
+      const templateId = toTemplateId(options.templateId);
+      const existingTplRes = this.templateRepo.getTemplateById(templateId);
+      if (!existingTplRes.ok) {
+        return existingTplRes;
+      }
+      if (!existingTplRes.value) {
+        return Err(
+          new AppError({
+            code: ErrorCode.TEMPLATE_NOT_FOUND,
+            userMessage: `Cannot replace template: Template "${options.templateId}" does not exist.`,
+            isOperational: true,
+          })
+        );
+      }
+      const existingTemplate = existingTplRes.value;
+      const previousVersionId = existingTemplate.active_version_id ?? null;
+
+      // 2. Source file inspection & security assertions
+      const sourceFilePath = options.sourceFilePath;
+      if (!fs.existsSync(sourceFilePath)) {
+        return Err(
+          new AppError({
+            code: ErrorCode.FILE_NOT_FOUND,
+            userMessage: `Replacement source template file was not found at path: "${sourceFilePath}".`,
+            isOperational: true,
+          })
+        );
+      }
+
+      const stat = fs.statSync(sourceFilePath);
+      if (!stat.isFile()) {
+        return Err(
+          new AppError({
+            code: ErrorCode.VALIDATION_FAILED,
+            userMessage: `Replacement source path "${sourceFilePath}" is not a regular file.`,
+            isOperational: true,
+          })
+        );
+      }
+
+      // Invariant INV-DAT-006: Source must not reside inside the master template vault
+      try {
+        assertTargetNotInsideVault(sourceFilePath, this.vaultManager.templatesDir);
+      } catch (err) {
+        if (err instanceof AppError) {
+          return Err(err);
+        }
+        return Err(
+          new AppError({
+            code: ErrorCode.SECURITY_VIOLATION,
+            userMessage:
+              'Security violation: Replacement source file cannot be inside the Master Template Vault.',
+            isOperational: true,
+          })
+        );
+      }
+
+      // 3. Format compatibility check
+      const rawExt = path.extname(sourceFilePath).toLowerCase();
+      const detectedFormat: ReportDocumentFormat = rawExt === '.docx' ? 'WORD_DOCX' : 'EXCEL_XLSX';
+
+      if (detectedFormat !== existingTemplate.document_type) {
+        return Err(
+          new AppError({
+            code: ErrorCode.VALIDATION_FAILED,
+            userMessage: `Incompatible document format: Cannot replace ${existingTemplate.document_type} template "${existingTemplate.template_name}" with a ${detectedFormat} file.`,
+            isOperational: true,
+          })
+        );
+      }
+
+      // 4. Staging into ephemeral scratch sandbox
+      const scratchDir = this.vaultManager.scratchDir;
+      const randomToken = crypto.randomBytes(4).toString('hex');
+      const stagedFilename = `replace_${Date.now()}_${randomToken}.tmp`;
+      stagedPath = path.join(scratchDir, stagedFilename);
+
+      fs.copyFileSync(sourceFilePath, stagedPath);
+
+      // 5. Open XML Container Validation via DocumentValidator
+      const validationRes = validateDocumentFile(stagedPath, rawExt);
+      if (!validationRes.ok) {
+        return validationRes;
+      }
+      const validation = validationRes.value;
+
+      // Double-check detected format matches template
+      if (validation.detectedFormat !== existingTemplate.document_type) {
+        return Err(
+          new AppError({
+            code: ErrorCode.VALIDATION_FAILED,
+            userMessage: `Incompatible document format: The replacement file contains ${validation.detectedFormat} data, but template "${existingTemplate.template_name}" requires ${existingTemplate.document_type}.`,
+            isOperational: true,
+          })
+        );
+      }
+
+      // 6. Allocate next sequential version number and distinct vault filename
+      const targetExt = existingTemplate.document_type === 'EXCEL_XLSX' ? '.xlsx' : '.docx';
+      const versionsRes = this.templateRepo.getVersionsByTemplateId(templateId);
+      const currentCount = versionsRes.ok ? versionsRes.value.length : 0;
+      let versionNumber = currentCount + 1;
+      let targetVaultFilename = `${templateId}_v${versionNumber}${targetExt}`;
+
+      const vaultPathRes = this.vaultManager.resolveTemplateFileVaultPath(targetVaultFilename);
+      if (!vaultPathRes.ok) {
+        return vaultPathRes;
+      }
+      targetVaultPath = vaultPathRes.value;
+
+      // Invariant: Never overwrite existing master file
+      if (fs.existsSync(targetVaultPath)) {
+        versionNumber = Date.now();
+        targetVaultFilename = `${templateId}_v${versionNumber}${targetExt}`;
+        const fallbackPathRes = this.vaultManager.resolveTemplateFileVaultPath(targetVaultFilename);
+        if (!fallbackPathRes.ok) {
+          return fallbackPathRes;
+        }
+        targetVaultPath = fallbackPathRes.value;
+      }
+
+      // 7. Promote staged file into Master Template Vault
+      fs.copyFileSync(stagedPath, targetVaultPath);
+
+      // 8. Set read-only mode
+      this.vaultManager.makeFileReadOnly(targetVaultPath);
+
+      // 9. Register new version and set active in SQLite
+      const versionRegRes = this.templateRepo.registerNewVersion({
+        templateId,
+        fileName: targetVaultFilename,
+        sha256Hash: validation.sha256Hash,
+        fileSizeBytes: validation.fileSizeBytes,
+        changeSummary: options.changeSummary ?? 'Replaced master template asset',
+        setActive: true,
+      });
+
+      if (!versionRegRes.ok) {
+        throw versionRegRes.error;
+      }
+
+      // 10. Fetch updated template record
+      const updatedTplRes = this.templateRepo.getTemplateById(templateId);
+      if (!updatedTplRes.ok || !updatedTplRes.value) {
+        throw new Error(`Failed to reload template "${templateId}" after replacement.`);
+      }
+
+      return Ok({
+        template: updatedTplRes.value,
+        newVersion: versionRegRes.value,
+        previousVersionId,
+      });
+    } catch (err) {
+      // Rollback safety
+      if (targetVaultPath && fs.existsSync(targetVaultPath)) {
+        try {
+          fs.chmodSync(targetVaultPath, 0o666);
+          fs.unlinkSync(targetVaultPath);
+        } catch {
+          // best-effort rollback
+        }
+      }
+
+      if (err instanceof AppError) {
+        return Err(err);
+      }
+      return Err(
+        new AppError({
+          code: ErrorCode.PERSISTENCE_FAILED,
+          userMessage: 'Failed to complete template replacement transaction.',
+          details: { developerMessage: String(err) },
+          isOperational: true,
+          cause: err,
+        })
+      );
+    } finally {
+      if (stagedPath && fs.existsSync(stagedPath)) {
+        try {
+          fs.unlinkSync(stagedPath);
+        } catch {
+          // Staging sweep will clean up
         }
       }
     }

@@ -19,6 +19,8 @@ import type {
   TemplateMetadataRecord,
   CreateTemplateMetadataInput,
   UpdateTemplateMetadataInput,
+  TemplateVersionRecord,
+  CreateTemplateVersionInput,
 } from '../../shared/types/templates.ts';
 import type {
   SessionStatus,
@@ -42,6 +44,8 @@ export type {
   TemplateMetadataRecord,
   CreateTemplateMetadataInput,
   UpdateTemplateMetadataInput,
+  TemplateVersionRecord,
+  CreateTemplateVersionInput,
   SessionStatus,
   SessionStationSnapshot,
   ReportSessionPayload,

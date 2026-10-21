@@ -12,3 +12,7 @@ export * from './categories.ts';
 export * from './templates.ts';
 export * from './sessions.ts';
 export * from './storage.ts';
+export * from './excel-mapping.ts';
+export * from './word-mapping.ts';
+export * from './mapping-profile.ts';
+export * from './template-designer.ts';

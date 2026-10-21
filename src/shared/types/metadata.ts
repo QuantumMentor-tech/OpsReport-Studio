@@ -18,7 +18,33 @@ import type {
   TemplateFileSelection,
   ImportTemplateOptions,
   TemplateImportResult,
+  TemplateVersionRecord,
+  CloneMasterTemplateOptions,
+  CloneMasterTemplateResult,
+  TemplateIntegrityCheckResult,
+  TemplateInspectionResult,
+  InspectTemplateOptions,
+  ReplaceTemplateOptions,
+  ReplaceTemplateResult,
+  TemplateHealthRecord,
 } from './templates.ts';
+import type {
+  ExcelFieldMappingRecord,
+  ExcelTemplateMappingConfig,
+  SaveExcelMappingsInput,
+} from './excel-mapping.ts';
+import type {
+  WordFieldMappingRecord,
+  WordTemplateMappingConfig,
+  SaveWordMappingsInput,
+} from './word-mapping.ts';
+import type {
+  MappingProfileRecord,
+  MappingProfileWithDetails,
+  CreateMappingProfileInput,
+  UpdateMappingProfileInput,
+  MappingValidationResult,
+} from './mapping-profile.ts';
 import type {
   ReportSessionRecord,
   ReportSessionDetail,
@@ -115,6 +141,90 @@ export interface TemplateBridgeAPI {
   readonly importTemplate: (
     options: ImportTemplateOptions
   ) => Promise<Result<TemplateImportResult, SerializableError>>;
+  readonly getVersions: (
+    templateId: string
+  ) => Promise<Result<TemplateVersionRecord[], SerializableError>>;
+  readonly getVersionById: (
+    versionId: string
+  ) => Promise<Result<TemplateVersionRecord | null, SerializableError>>;
+  readonly getActiveVersion: (
+    templateId: string
+  ) => Promise<Result<TemplateVersionRecord | null, SerializableError>>;
+  readonly setActiveVersion: (
+    templateId: string,
+    versionId: string
+  ) => Promise<Result<TemplateVersionRecord, SerializableError>>;
+  readonly cloneMaster: (
+    options: CloneMasterTemplateOptions
+  ) => Promise<Result<CloneMasterTemplateResult, SerializableError>>;
+  readonly verifyIntegrity: (
+    versionId: string
+  ) => Promise<Result<TemplateIntegrityCheckResult, SerializableError>>;
+  readonly inspectTemplate: (
+    options: InspectTemplateOptions
+  ) => Promise<Result<TemplateInspectionResult, SerializableError>>;
+  readonly replaceTemplate: (
+    options: ReplaceTemplateOptions
+  ) => Promise<Result<ReplaceTemplateResult, SerializableError>>;
+  readonly checkHealth: (
+    templateId: string
+  ) => Promise<Result<TemplateHealthRecord, SerializableError>>;
+  readonly checkAllHealth: () => Promise<Result<TemplateHealthRecord[], SerializableError>>;
+  readonly getDependencyCount: (
+    templateId: string
+  ) => Promise<Result<{ sessionCount: number }, SerializableError>>;
+  readonly getExcelMappings: (
+    templateId: string,
+    versionId: string,
+    worksheetName?: string
+  ) => Promise<Result<ExcelFieldMappingRecord[], SerializableError>>;
+  readonly saveExcelMappings: (
+    input: SaveExcelMappingsInput
+  ) => Promise<Result<ExcelTemplateMappingConfig, SerializableError>>;
+  readonly deleteExcelMappings: (
+    templateId: string,
+    versionId: string,
+    worksheetName?: string
+  ) => Promise<Result<boolean, SerializableError>>;
+  readonly getWordMappings: (
+    templateId: string,
+    versionId: string
+  ) => Promise<Result<WordFieldMappingRecord[], SerializableError>>;
+  readonly saveWordMappings: (
+    input: SaveWordMappingsInput
+  ) => Promise<Result<WordTemplateMappingConfig, SerializableError>>;
+  readonly deleteWordMappings: (
+    templateId: string,
+    versionId: string
+  ) => Promise<Result<boolean, SerializableError>>;
+  readonly listProfiles: (filter?: {
+    categoryId?: string;
+    templateId?: string;
+    versionId?: string;
+    status?: string;
+  }) => Promise<Result<MappingProfileWithDetails[], SerializableError>>;
+  readonly getProfile: (
+    profileId: string
+  ) => Promise<Result<MappingProfileWithDetails | null, SerializableError>>;
+  readonly createProfile: (
+    input: CreateMappingProfileInput
+  ) => Promise<Result<MappingProfileRecord, SerializableError>>;
+  readonly updateProfile: (
+    profileId: string,
+    updates: UpdateMappingProfileInput
+  ) => Promise<Result<MappingProfileRecord, SerializableError>>;
+  readonly deleteProfile: (profileId: string) => Promise<Result<boolean, SerializableError>>;
+  readonly duplicateProfile: (
+    profileId: string,
+    newProfileName: string
+  ) => Promise<Result<MappingProfileWithDetails, SerializableError>>;
+  readonly validateProfile: (input: {
+    profileId?: string;
+    templateId: string;
+    versionId: string;
+    categoryId?: string;
+    documentType?: string;
+  }) => Promise<Result<MappingValidationResult, SerializableError>>;
 }
 
 export interface SessionBridgeAPI {
@@ -147,6 +257,39 @@ export interface VaultBridgeAPI {
     templateId: string,
     extension?: string
   ) => Promise<Result<boolean, SerializableError>>;
+  readonly cloneMaster: (
+    options: CloneMasterTemplateOptions
+  ) => Promise<Result<CloneMasterTemplateResult, SerializableError>>;
+  readonly verifyIntegrity: (
+    versionId: string
+  ) => Promise<Result<TemplateIntegrityCheckResult, SerializableError>>;
+}
+
+export interface DesignerBridgeAPI {
+  readonly listDrafts: (
+    documentType?: import('./template-designer.ts').DesignerDocumentType,
+    categoryId?: string
+  ) => Promise<Result<import('./template-designer.ts').DesignerDraftSummary[], SerializableError>>;
+  readonly getDraft: (
+    draftId: string
+  ) => Promise<Result<import('./template-designer.ts').DesignerDraftRecord | null, SerializableError>>;
+  readonly createDraft: (
+    input: import('./template-designer.ts').CreateDesignerDraftInput
+  ) => Promise<Result<import('./template-designer.ts').DesignerDraftRecord, SerializableError>>;
+  readonly updateDraft: (
+    draftId: string,
+    input: import('./template-designer.ts').UpdateDesignerDraftInput
+  ) => Promise<Result<import('./template-designer.ts').DesignerDraftRecord, SerializableError>>;
+  readonly deleteDraft: (
+    draftId: string
+  ) => Promise<Result<boolean, SerializableError>>;
+  readonly validateDesign: (
+    definition: import('./template-designer.ts').TemplateDesignDefinition,
+    categoryId?: string
+  ) => Promise<Result<import('./template-designer.ts').DesignerValidationResult, SerializableError>>;
+  readonly compileAndRegister: (
+    input: import('./template-designer.ts').CompileAndRegisterInput
+  ) => Promise<Result<import('./template-designer.ts').CompileAndRegisterResult, SerializableError>>;
 }
 
 export interface OpsReportBridgeAPI {
@@ -157,4 +300,5 @@ export interface OpsReportBridgeAPI {
   readonly templates?: TemplateBridgeAPI;
   readonly sessions?: SessionBridgeAPI;
   readonly vault?: VaultBridgeAPI;
+  readonly designer?: DesignerBridgeAPI;
 }

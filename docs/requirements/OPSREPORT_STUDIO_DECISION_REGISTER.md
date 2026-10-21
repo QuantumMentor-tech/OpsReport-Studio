@@ -592,7 +592,213 @@ This document serves as the authoritative repository of architectural, technical
 * **Risks & Dependencies:** Future Step 19 (Template Immutability & Cloning) and Step 20 (Template Metadata Inspection) will directly consume imported master templates stored in the vault.
 * **Evidence Needed:** Step 18 Completion Report (`STEP_18_TEMPLATE_IMPORT_REPORT.md`), `OPSREPORT_STUDIO_DOCUMENT_COMPATIBILITY_MATRIX.md`.
 * **Decision Owner:** Senior Desktop Application Engineer / Senior Document-Processing Engineer / Senior Filesystem Security Engineer.
-* **Current Status:** **CONFIRMED BASELINE (Option A: 8-Stage Staged Pipeline, Open XML Container Validation, Macro Quarantine, Atomic Rollback & Source Preservation)**.
+### DEC-041: Master Template Immutability, Safe Cloning & Template Versioning Architecture
+* **Question:** How should OpsReport Studio enforce master template immutability, preserve historical template revisions upon modification, and create safe working copies for downstream processing without mutating or corrupting master assets?
+* **Why It Matters:** In operational reporting, master templates are authoritative legal/regulatory baselines. Overwriting a master template during import, metadata updating, or report generation risks silent corruption, invalidating historical report reproduction, and violating core safety invariant `INV-DAT-006`.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Model template identity at two distinct tiers:
+       - *Logical Template (`template_metadata`):* Holds enduring identity (`template_id`), human title, report category association (`category_id`), document format, status, active version reference (`active_version_id`), and version count (`total_versions`).
+       - *Physical Immutable Version (`template_versions`):* Relational table capturing version number (`version_number` >= 1), managed vault filename (`file_name`), cryptographic fingerprint (`sha256_hash`), file size, change notes, active status, and timestamp.
+     - Enforce non-destructive versioning:
+       - Template updates allocate the next sequential version number (`MAX(version_number) + 1`) and generate distinct vault filenames (`{templateId}_v{versionNumber}.{xlsx|docx}`). Historical files are never overwritten.
+       - Migration 004 automatically provisions version 1 (`VER-{templateId}-V1`) for all pre-existing templates.
+     - Enforce master template immutability via dual application and OS controls:
+       - Application service-level write protections: Zero arbitrary write operations permitted against `Templates/`.
+       - Filesystem-level defense-in-depth: Accepted master files are marked read-only (`0o444`).
+       - Cryptographic integrity checking: `VaultManager.verifyVersionIntegrity()` compares physical file bytes against recorded SHA-256 hashes to detect external tampering.
+     - Implement copy-first independent cloning service:
+       - `VaultManager.cloneMasterTemplate()` creates an independent working copy in the `%LOCALAPPDATA%\OpsReportStudio\Scratch\` sandbox (`{purpose}_{templateId}_v{version}_{timestamp}_{random}.{ext}`).
+       - Byte-preserving copy verifies destination hash matches source hash.
+       - Master source file is verified to remain 100% untouched.
+       - Destination is guarded by `assertTargetNotInsideVault` (`INV-DAT-006`).
+     - Expose typed IPC endpoints across process boundaries (`templates:get-versions`, `templates:get-active-version`, `templates:set-active-version`, `templates:clone-master`, `templates:verify-integrity`).
+     - Display version count badge (`v{total_versions}`) and active version in `TemplatesView.tsx`.
+     - Strictly exclude full version-history management UI (Step 21), mapping wizards (Steps 22–23), or document generation engines (Steps 26–33).
+  2. *Option B:* Rely solely on OS file attributes, mutate master templates in-place, overwrite master files during report generation, or store copies without cryptographic verification. (REJECTED - Violates data integrity standards, creates silent corruption risks, and violates `INV-DAT-006`).
+* **Risks & Dependencies:** Future Step 20 (Metadata Inspection & Previews) and Step 26+ (Report Generation Engines) will rely directly on `cloneMasterTemplate` for working copies and `getActiveVersion` for template resolution.
+* **Evidence Needed:** Step 19 Completion Report (`STEP_19_TEMPLATE_VERSIONING_REPORT.md`), `OPSREPORT_STUDIO_FILE_STORAGE_SPECIFICATION.md`.
+* **Decision Owner:** Senior Desktop Application Architect / Senior Filesystem & Storage Engineer / Senior Application Security Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Two-Tier Versioning Model, Copy-First Cloning, SHA-256 Integrity Verification & Non-Destructive Version Promotion)**.
+
+---
+
+### DEC-042: Read-Only Template Metadata Inspection & Lightweight Structure Preview Architecture
+* **Question:** How should OpsReport Studio implement read-only template metadata inspection and document structure previewing for Excel (.xlsx) and Word (.docx) templates while strictly preventing master file mutations and preserving the boundary between heuristic previews and persistent mappings?
+* **Why It Matters:** Prior to configuring complex field-to-cell or placeholder mappings (Steps 22-24), operators need to inspect the stored metadata, physical vault status, and internal document structure of an existing template version. Inspecting templates must never modify master template bytes (`INV-DAT-006`), must not persist candidate suggestions into database mappings prematurely, and must bound resource consumption (rows, columns, paragraphs, text length) to prevent memory exhaustion.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Read-only inspection service (`TemplateInspector`):
+       - Resolves authoritative logical template metadata and exact requested version (`version_id` or active version).
+       - Confirms canonical physical vault file existence under `%LOCALAPPDATA%\OpsReportStudio\Templates\`.
+       - Cryptographically verifies asset integrity via SHA-256 fingerprint before opening.
+       - Guarantees master immutability by asserting pre-inspection hash equals post-inspection hash.
+       - Leverages `PizZip` to open Open XML packages in memory with zero file modification or write-backs.
+     - Excel Workbook Preview:
+       - Extracts worksheet names, ordering, and sheet visibility from `xl/workbook.xml`.
+       - Decodes `xl/sharedStrings.xml` for shared text lookup.
+       - Parses active worksheet (`xl/worksheets/sheet*.xml`) with bounded row (15 max) and column (10 max) limits.
+       - Displays formulas (`<f>` tag) with visual `fx` indicator and cached values.
+       - Identifies merged cell ranges (`<mergeCell ref="...">`).
+       - Implements conservative candidate header row heuristic: detects first row with >=2 non-empty text cells; strictly labeled as a candidate suggestion.
+     - Word Document Preview:
+       - Extracts body paragraphs in document order from `word/document.xml`, filtering out table-internal paragraphs.
+       - Detects presence of headers (`word/header*.xml`), footers (`word/footer*.xml`), and drawings/images.
+       - Bounded table inspection (5 tables max, 10 rows max, 6 columns max) with merged cell indicators.
+       - Detects approved curly-brace candidate placeholder tokens (`\{([a-zA-Z0-9_]+)\}`) across paragraph and table text; strictly labeled as candidate suggestions.
+     - Lightweight Mapping Readiness Preview:
+       - Presents structured findings and diagnostic notes with explicit non-persistence disclaimers.
+       - Zero database write operations; no field-to-cell or placeholder mappings are persisted.
+     - Accessible UI Integration (`TemplateInspectModal`):
+       - Accessible modal dialog accessible from the "Inspect" button in `TemplatesView.tsx`.
+       - Version dropdown switcher allows inspecting historical versions as well as active versions.
+       - Sub-tabs: "Document Preview", "Stored Metadata", and "Mapping Readiness".
+       - Styled with design system tokens, supporting light/dark theme, responsive scrolling, and keyboard ESC dismiss.
+     - Dual-mode IPC bridge: Exposed via `window.opsreport.templates.inspectTemplate` and mocked in `InMemoryTemplateClient`.
+     - Strict scope preservation: Excludes Excel mapping wizards (Step 22), Word placeholder wizards (Step 23), mapping profiles (Step 24), and report generation engines (Steps 26-33).
+  2. *Option B:* Use a full-blown spreadsheet editor / Word processor component in the renderer, parse unbounded files directly on the UI thread, mutate master files during preview, or persist guessed mappings automatically into the database. (REJECTED - Violates security, performance, and data integrity standards).
+* **Risks & Dependencies:** Steps 22 (Excel Cell Mapping) and 23 (Word Placeholder Mapping) will build upon the structural insights exposed by this inspection service.
+* **Evidence Needed:** Step 20 Completion Report (`STEP_20_TEMPLATE_INSPECTION_REPORT.md`), `tests/unit/template-inspector.test.ts`.
+* **Decision Owner:** Senior Desktop Application Engineer / Senior Spreadsheet & Word Processing Engineer / Senior UI/UX Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: PizZip Read-Only Container Parsing, Bounded Previews, Candidate Heuristic Disclaimers & Master Immutability Assertion)**.
+
+---
+
+### DEC-043: Template Library Management, Replacement & Recovery Safeguards (Step 21)
+* **Date:** 2026-10-21
+* **Context:** Roadmap Step 21 requires a complete template library management experience enabling operators to browse registered templates, view version counts, inspect file health, edit permitted metadata, replace master templates non-destructively, manage lifecycle status (retire/archive), and safely recover from missing/inconsistent assets without destroying historical report audit trails.
+* **Options Considered:**
+  1. *Option A (Recommended & Implemented):*
+     - Unified Library View (`TemplatesView.tsx`):
+       - Multi-criteria filtering: report category, document format (`EXCEL_XLSX` vs `WORD_DOCX`), lifecycle status (`ACTIVE`, `DRAFT`, `ARCHIVED`), and health condition (`HEALTHY` vs `PROBLEM`).
+       - Deterministic sorting: by name (A-Z / Z-A), category, format, or timestamps.
+       - Real-time cryptographic health verification badges (`✓ Intact`, `⚠ File Missing`, `⚠ Integrity Mismatch`, `⚠ No Active Version`).
+       - "Re-verify Health" operator button to audit vault assets on demand.
+     - Safe Metadata Editing:
+       - Permitted fields: `template_name`, `description`, and `status`.
+       - Category reassignment permitted only when destination category format matches template format.
+       - Master document format and vault filenames are immutable in edit mode (protected system metadata).
+       - Zero disk byte modifications during metadata-only operations.
+     - Controlled Template Replacement (`ReplaceTemplateModal.tsx` & `template-importer.ts`):
+       - Explicit target logical template confirmation.
+       - Reuses Step 18 document validator and Open XML staging pipeline.
+       - Strictly enforces document format compatibility (rejects cross-format replacement).
+       - Allocates next sequential version (version N+1) in `template_versions` table.
+       - Atomic promotion of version N+1 to `active_version_id` only after successful disk write and hash verification.
+       - 100% preservation of all historical version files (never overwrites or deletes existing masters).
+     - Lifecycle Safeguards (Reversible Retirement vs Safe Permanent Deletion):
+       - Reversible retirement: toggles status between `ACTIVE` and `ARCHIVED`, keeping metadata, version history, and vault files intact.
+       - Deletion Dependency Enforcement: queries `report_sessions` references (`template_id`). If sessions reference the template, permanent deletion is strictly blocked with `ErrorCode.VALIDATION_FAILED` and operator is guided to Archive.
+       - If 0 sessions reference the template, deletion safely cleans up metadata, version records, and unlocks read-only vault files (`0o666`) before unlinking.
+     - User-Directed Recovery (`TemplateRecoveryModal.tsx` & `template-health-service.ts`):
+       - Detects real conditions: `OK`, `MISSING_FILE`, `INTEGRITY_MISMATCH`, `NO_ACTIVE_VERSION`.
+       - Option 1 (Rollback to Historical Version): Lists verified intact historical versions and promotes selected version to active.
+       - Option 2 (Re-Import Clean Replacement File): Validates new source file and registers version N+1.
+       - Option 3 (Re-Verify Vault Asset): Re-evaluates disk integrity after filesystem/storage adjustments.
+       - Zero fake backups: Explicitly refuses false "Restore Backup" promises when no snapshot mechanism exists.
+     - Strict Scope Boundaries: Excludes Excel worksheet/cell mapping wizard (Step 22), Word placeholder wizard (Step 23), mapping profiles (Step 24), and report generation engines (Steps 26-33).
+  2. *Option B:* Allow destructive in-place file overwrites during replacement, allow arbitrary category reassignments regardless of format, allow cascade-deletion of historical sessions, or invent an unverified backup snapshot system. (REJECTED - Violates master immutability and data integrity invariants).
+* **Risks & Dependencies:** Future report generation and mapping wizards depend on templates remaining intact, with valid versions and truthful health status.
+* **Evidence Needed:** Step 21 Completion Report (`STEP_21_TEMPLATE_LIBRARY_MANAGEMENT_REPORT.md`), `tests/unit/template-library-management.test.ts`.
+* **Decision Owner:** Senior Desktop Application Engineer / Senior Database Engineer / Senior Filesystem & Data Integrity Engineer / Senior UI/UX Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Unified Library Management, Safe Metadata, Non-Destructive Replacement, Dependency-Checked Deletion, and Verified Health Recovery)**.
+
+---
+
+### DEC-044: Excel Worksheet, Header Row & Cell Mapping Persistence Architecture (Step 22)
+* **Date:** 2026-10-21
+* **Context:** Roadmap Step 22 requires a guided, multi-step configuration wizard allowing operators to select an approved Excel master template version, inspect its actual worksheets, select an active worksheet and header row, extract columns, and map approved report fields (from the authoritative `DIC-OPSREPORT-001` catalog) to fixed single-value cells or tabular columns. The configuration must be validated, persisted outside the template workbook in SQLite, and leave the master template file 100% byte-for-byte immutable.
+* **Options Considered:**
+  1. *Option A (Recommended & Implemented):*
+     - Authoritative Field Catalog (`src/shared/constants/report-fields.ts`):
+       - Implements `DIC-OPSREPORT-001` specification.
+       - Common core fields: `FLD-COM-DATE`, `FLD-COM-INSPECTOR`, `FLD-COM-SHIFT`, `FLD-COM-STATION`, `FLD-COM-LOCATION`, `FLD-COM-REMARKS`, `FLD-COM-STATUS`.
+       - Category-specific fields for all 6 Excel categories (`RPT-STATION-LIGHT`, `RPT-FAN`, `RPT-POLE-LIGHT`, `RPT-FIRE-EXTINGUISHER`, `RPT-PILLAR`, `RPT-FENCE`).
+     - Five-Stage Guided Wizard Modal (`ExcelMappingWizardModal.tsx`):
+       - Stage 1 (Version Selection & Integrity): Cryptographic SHA-256 verification of active or historical template version.
+       - Stage 2 (Worksheet Selection): Enumerates actual Open XML worksheets from read-only inspector; renders 15x10 bounded cell preview with formula/merged cell flags.
+       - Stage 3 (Header Row Designation): Operator selects header row; heuristic candidate suggested; tabular columns extracted with physical column letters (A, B, C...) resolving duplicate labels.
+       - Stage 4 (Field-to-Destination Mapping): Split configuration between Fixed-Cell (e.g., `B2`) and Table-Column (e.g., `C`); inline type badges; target coordinate validation; conflict detection.
+       - Stage 5 (Review, Validation & Persistence): Summary matrix; real-time validation error alerts; atomic persistence in SQLite via IPC.
+     - External Persistence Schema (Migration 005 `excel_template_mappings`):
+       - Fully relational: `mapping_id`, `template_id`, `version_id`, `worksheet_name`, `header_row_number`, `mapping_type`, `field_id`, `field_label`, `target_coordinate`, `column_header`, `is_required`, `created_at`, `updated_at`.
+       - Integrity constraints: `UNIQUE (template_id, version_id, worksheet_name, field_id)` prevents assigning same field twice in same worksheet; `UNIQUE (template_id, version_id, worksheet_name, mapping_type, target_coordinate)` prevents destination collisions.
+       - Atomic replacement within transaction: saving replaces all mappings for the specified `(template_id, version_id, worksheet_name)`.
+     - Master Template Immutability:
+       - Inspection, mapping configuration, and database writes never modify or rewrite the vault file. SHA-256 hash verified before and after workflow.
+     - Strict Scope Boundaries: Excludes Word placeholder mapping (Step 23), reusable mapping profiles (Step 24), in-app template designer (Step 25), and report generation data injection (Steps 26-30).
+  2. *Option B:* Embed cell mapping instructions as hidden worksheets or custom XML parts inside the Excel file itself, use uncontrolled manual text entry without coordinate validation, or allow runtime generation without persistence. (REJECTED - Violates master template immutability and multi-version integrity).
+* **Risks & Dependencies:** Step 26+ Excel report generation pipeline depends on valid mapping records in `excel_template_mappings`.
+* **Evidence Needed:** Step 22 Completion Report (`STEP_22_EXCEL_MAPPING_WIZARD_REPORT.md`), `tests/unit/excel-mapping-wizard.test.ts`.
+* **Decision Owner:** Senior Desktop Application Engineer / Senior Spreadsheet Processing Engineer / Senior Database Engineer / Senior UI/UX Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Authoritative Field Catalog, 5-Stage Wizard, SQLite Mapping Persistence & Absolute Master Immutability)**.
+
+---
+
+### DEC-045: Word Template Placeholder, Paragraph & Table Mapping Persistence Architecture (Step 23)
+* **Date:** 2026-10-21
+* **Context:** Roadmap Step 23 requires a guided, multi-step configuration wizard allowing operators to select an approved Word master template version, inspect its actual structure (paragraphs, tables, dimensions, cell text, candidate tokens), detect approved placeholder tokens (`{token}` syntax) or specify structural targets (paragraphs `P:n`, table cells `T1:Rn:Cn`, or repeating rows `T1:Rn:LOOP`), and map approved report fields (from the authoritative `DIC-OPSREPORT-001` catalog for `RPT-INCIDENT`) to recognized targets. The configuration must be validated, persisted outside the template document in SQLite, and leave the master template file 100% byte-for-byte immutable.
+* **Options Considered:**
+  1. *Option A (Recommended & Implemented):*
+     - Authoritative Field Catalog Integration (`src/shared/constants/report-fields.ts`):
+       - Uses `DIC-OPSREPORT-001` specification for Security Incident reports (`RPT-INCIDENT`).
+       - Common core fields: `FLD-COM-DATE`, `FLD-COM-INSPECTOR`, `FLD-COM-SHIFT`, `FLD-COM-STATION`, `FLD-COM-LOCATION`, `FLD-COM-REMARKS`, `FLD-COM-STATUS`.
+       - Security Incident category fields: `FLD-INC-REF-NO`, `FLD-INC-OCCUR-TIME`, `FLD-INC-DISCOVER-TIME`, `FLD-INC-TYPE`, `FLD-INC-SEVERITY`, `FLD-INC-SPEC-LOC`, `FLD-INC-NARRATIVE`, `FLD-INC-ACTIONS`, `FLD-INC-PERSONS`, `FLD-INC-POLICE-NOTIFIED`, `FLD-INC-POLICE-CAD`, `FLD-INC-DAMAGE-EST`, `FLD-INC-FOLLOWUP`, `FLD-INC-STATUS`.
+     - Four-Stage Guided Wizard Modal (`WordMappingWizardModal.tsx`):
+       - Stage 1 (Version Selection & Cryptographic Verification): SHA-256 verification of active or historical Word template version.
+       - Stage 2 (Document Structure & Preview): Read-only inspection of Open XML document (`word/document.xml`), header/footer presence, table count, paragraph count, bounded paragraph previews, and candidate placeholder tokens extracted from paragraphs and table cells.
+       - Stage 3 (Field-to-Target Mapping Configuration): Auto-match button for recognized placeholder tokens; support for all 4 supported target kinds: `PLACEHOLDER` (`{token}`), `PARAGRAPH` (`P:1`), `TABLE_CELL` (`T1:R2:C3`), `REPEATING_ROW` (`T1:R2:LOOP`); conflict and coordinate syntax validation.
+       - Stage 4 (Review, Validation & Persistence): Summary matrix; unmapped field warnings; destination collision alerts; atomic SQLite persistence via IPC.
+     - External Persistence Schema (Migration 006 `word_template_mappings`):
+       - Fully relational: `mapping_id`, `template_id`, `version_id`, `mapping_type`, `field_id`, `field_label`, `target_coordinate`, `target_description`, `is_required`, `created_at`, `updated_at`.
+       - Strict integrity constraints: `UNIQUE (template_id, version_id, field_id)` prevents assigning the same field twice; `UNIQUE (template_id, version_id, mapping_type, target_coordinate)` prevents destination collisions.
+       - Atomic replacement within transaction: saving replaces all mappings for the specified `(template_id, version_id)`.
+     - Master Template Immutability:
+       - Inspection, mapping configuration, and database writes never modify or rewrite the vault file. SHA-256 hash verified before and after workflow.
+     - Strict Scope Boundaries: Excludes reusable mapping profiles (Step 24), in-app template designer (Step 25), and Word report generation / data injection (Steps 31-33).
+  2. *Option B:* Embed mapping instructions as custom Word XML parts or inline comments inside the document file, guess unapproved placeholder syntax (e.g. angle brackets, double braces), or allow runtime generation without persistence. (REJECTED - Violates master template immutability and multi-version integrity).
+* **Risks & Dependencies:** Step 31+ Word report generation pipeline depends on valid mapping records in `word_template_mappings`.
+* **Evidence Needed:** Step 23 Completion Report (`STEP_23_WORD_MAPPING_WIZARD_REPORT.md`), `tests/unit/word-mapping-wizard.test.ts`.
+* **Decision Owner:** Senior Desktop Application Engineer / Senior Word Document Processing Engineer / Senior Database Engineer / Senior UI/UX Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Authoritative Field Catalog, 4-Stage Wizard, SQLite Mapping Persistence & Absolute Master Immutability)**.
+
+---
+
+### DEC-046: Reusable Mapping Profiles, Centralized Field Validation & Template Compatibility Architecture
+* **Question:** How should OpsReport Studio represent, organize, persist, and validate field mappings for reusable Excel and Word templates, ensuring configurations are verified against authoritative report-field contracts and physical document structures before generation workflows consume them?
+* **Why It Matters:** Without a persistent mapping-profile abstraction, field mappings remain tightly coupled to raw template versions without user-facing revision control, cloning, or modular reusability. Without a centralized validation engine, stale target references, missing required fields, coordinate collisions, and corrupted template vault assets cause silent failures or corrupt outputs during document generation. Core safety invariant `INV-DAT-006` requires that validation must never mutate or rewrite master template files.
+* **Available Options:**
+  1. *Option A (Recommended & Implemented):*
+     - Reusable Mapping Profile Domain & Persistence (Migration 007 `mapping_profiles`):
+       - Establishes `mapping_profiles` relational table linking template versions, report categories, and document formats with stable identifiers (`MappingProfileId`).
+       - Scopes child mapping uniqueness in `excel_template_mappings` and `word_template_mappings` by `profile_id`, allowing multiple independent profiles per template version while preserving backwards compatibility for legacy unassigned mappings (`profile_id IS NULL`).
+       - Supports safe profile lifecycle: create, list, retrieve with child mappings, transactional deep-copy duplication (`duplicateProfile`), and cascading deletion (`deleteProfile`).
+     - Centralized Validation Service (`MappingValidationService`):
+       - Single authoritative diagnostic engine verifying mapping configurations against domain contracts and physical Open XML assets.
+       - Verification Suites:
+         1. *Template Asset Integrity:* Verifies physical file existence in vault and verifies cryptographic SHA-256 checksum against database records (`VAL_ASSET_MISSING`, `VAL_ASSET_INTEGRITY_MISMATCH`). Returns `UNABLE_TO_VALIDATE` if corrupted.
+         2. *Field Existence:* Verifies every mapped field exists in authoritative `DIC-OPSREPORT-001` catalog (`VAL_FIELD_UNKNOWN`).
+         3. *Category Applicability:* Asserts field is approved for the template's designated report category (`VAL_FIELD_INAPPLICABLE`).
+         4. *Required Field Completeness:* Distinguishes unmapped mandatory fields (`VAL_FIELD_REQUIRED_UNMAPPED`, `ERROR`) leading to `INCOMPLETE` status, from unmapped optional fields (`VAL_FIELD_OPTIONAL_UNMAPPED`, `INFO`).
+         5. *Type & Repetition Compatibility:* Flags scalar mappings of repeating multi-station fields (`VAL_TYPE_INCOMPATIBLE`, `WARNING`).
+         6. *Collision & Duplication Detection:* Detects duplicate field mappings (`VAL_DUPLICATE_FIELD`) and destination coordinate collisions (`VAL_TARGET_COLLISION`).
+         7. *Excel Structural Checks:* Verifies worksheet existence (`VAL_WORKSHEET_NOT_FOUND`), header row presence, and cell coordinates against physical Open XML workbook.
+         8. *Word Structural Checks:* Verifies placeholder token existence (`VAL_PLACEHOLDER_NOT_FOUND`, `ERROR`) and bounded paragraph/table/row/cell coordinates (`VAL_STRUCTURAL_TARGET_OUT_OF_BOUNDS`).
+     - Strict Read-Only Master File Immutability:
+       - SHA-256 byte immutability verified before and after multiple validation runs (0-byte delta invariant).
+     - Actionable Compatibility Reports:
+       - Status states: `VALID`, `INVALID`, `INCOMPLETE`, `REQUIRES_REVIEW`, `UNCHECKED`, `UNABLE_TO_VALIDATE`.
+       - Findings with stable codes, severity levels (`ERROR`, `WARNING`, `INFO`), affected targets, and corrective operator actions.
+     - Accessible UI Integration (`MappingProfilesModal.tsx`):
+       - Split-view profile manager with live validation runner, check suite summary cards, severity-filtered diagnostic findings, and direct links to Step 22/23 mapping wizards for corrective editing.
+  2. *Option B:* Inline ad-hoc validation within UI forms, auto-repair invalid mappings by silently guessing replacements, or validate by attempting actual report generation and catching runtime exceptions. (REJECTED - Violates predictability, risks corrupting mappings or master files, and provides zero diagnostic explainability).
+* **Risks & Dependencies:** Future Step 25 (In-App Template Designer) and Steps 26–33 (Document Generation Engines) rely on `MappingValidationService` to certify profiles as `VALID` before generation proceeds.
+* **Evidence Needed:** Step 24 Completion Report (`STEP_24_MAPPING_PROFILES_VALIDATION_REPORT.md`), `tests/unit/mapping-profiles-and-validation.test.ts`.
+* **Decision Owner:** Senior Desktop Application Architect / Senior Data Modeling Engineer / Senior Application Security Engineer / Senior QA Automation Engineer.
+* **Current Status:** **CONFIRMED BASELINE (Option A: Reusable Mapping Profiles, Centralized Validation Service, Multi-Suite Compatibility Engine & Master Template Immutability)**.
+
+
+
 
 
 

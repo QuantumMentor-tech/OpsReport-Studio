@@ -11,6 +11,11 @@ import type {
   UpdateTemplateMetadataInput,
   TemplateStatus,
   ImportTemplateOptions,
+  CloneMasterTemplateOptions,
+  InspectTemplateOptions,
+  ReplaceTemplateOptions,
+  SaveExcelMappingsInput,
+  SaveWordMappingsInput,
   CreateReportSessionInput,
   UpdateReportSessionInput,
   SessionListFilter,
@@ -101,6 +106,88 @@ const bridgeAPI: OpsReportBridgeAPI = {
     importTemplate: async (options: ImportTemplateOptions) => {
       return ipcRenderer.invoke('template:import-file', options);
     },
+    getVersions: async (templateId: string) => {
+      return ipcRenderer.invoke('templates:get-versions', templateId);
+    },
+    getVersionById: async (versionId: string) => {
+      return ipcRenderer.invoke('templates:get-version-by-id', versionId);
+    },
+    getActiveVersion: async (templateId: string) => {
+      return ipcRenderer.invoke('templates:get-active-version', templateId);
+    },
+    setActiveVersion: async (templateId: string, versionId: string) => {
+      return ipcRenderer.invoke('templates:set-active-version', templateId, versionId);
+    },
+    cloneMaster: async (options: CloneMasterTemplateOptions) => {
+      return ipcRenderer.invoke('templates:clone-master', options);
+    },
+    verifyIntegrity: async (versionId: string) => {
+      return ipcRenderer.invoke('templates:verify-integrity', versionId);
+    },
+    inspectTemplate: async (options: InspectTemplateOptions) => {
+      return ipcRenderer.invoke('templates:inspect-template', options);
+    },
+    replaceTemplate: async (options: ReplaceTemplateOptions) => {
+      return ipcRenderer.invoke('templates:replace-template', options);
+    },
+    checkHealth: async (templateId: string) => {
+      return ipcRenderer.invoke('templates:check-health', templateId);
+    },
+    checkAllHealth: async () => {
+      return ipcRenderer.invoke('templates:check-all-health');
+    },
+    getDependencyCount: async (templateId: string) => {
+      return ipcRenderer.invoke('templates:get-dependency-count', templateId);
+    },
+    getExcelMappings: async (templateId: string, versionId: string, worksheetName?: string) => {
+      return ipcRenderer.invoke(
+        'templates:get-excel-mappings',
+        templateId,
+        versionId,
+        worksheetName
+      );
+    },
+    saveExcelMappings: async (input: SaveExcelMappingsInput) => {
+      return ipcRenderer.invoke('templates:save-excel-mappings', input);
+    },
+    deleteExcelMappings: async (templateId: string, versionId: string, worksheetName?: string) => {
+      return ipcRenderer.invoke(
+        'templates:delete-excel-mappings',
+        templateId,
+        versionId,
+        worksheetName
+      );
+    },
+    getWordMappings: async (templateId: string, versionId: string) => {
+      return ipcRenderer.invoke('templates:get-word-mappings', templateId, versionId);
+    },
+    saveWordMappings: async (input: SaveWordMappingsInput) => {
+      return ipcRenderer.invoke('templates:save-word-mappings', input);
+    },
+    deleteWordMappings: async (templateId: string, versionId: string) => {
+      return ipcRenderer.invoke('templates:delete-word-mappings', templateId, versionId);
+    },
+    listProfiles: async (filter?: any) => {
+      return ipcRenderer.invoke('profiles:list', filter);
+    },
+    getProfile: async (profileId: string) => {
+      return ipcRenderer.invoke('profiles:get', profileId);
+    },
+    createProfile: async (input: any) => {
+      return ipcRenderer.invoke('profiles:create', input);
+    },
+    updateProfile: async (profileId: string, updates: any) => {
+      return ipcRenderer.invoke('profiles:update', profileId, updates);
+    },
+    deleteProfile: async (profileId: string) => {
+      return ipcRenderer.invoke('profiles:delete', profileId);
+    },
+    duplicateProfile: async (profileId: string, newProfileName: string) => {
+      return ipcRenderer.invoke('profiles:duplicate', profileId, newProfileName);
+    },
+    validateProfile: async (input: any) => {
+      return ipcRenderer.invoke('profiles:validate', input);
+    },
   },
   sessions: {
     create: async (input: CreateReportSessionInput) => {
@@ -137,6 +224,35 @@ const bridgeAPI: OpsReportBridgeAPI = {
     },
     checkTemplateExists: async (templateId: string, extension?: string) => {
       return ipcRenderer.invoke('vault:check-template-exists', templateId, extension);
+    },
+    cloneMaster: async (options: CloneMasterTemplateOptions) => {
+      return ipcRenderer.invoke('templates:clone-master', options);
+    },
+    verifyIntegrity: async (versionId: string) => {
+      return ipcRenderer.invoke('templates:verify-integrity', versionId);
+    },
+  },
+  designer: {
+    listDrafts: async (documentType?: any, categoryId?: string) => {
+      return ipcRenderer.invoke('designer:list-drafts', documentType, categoryId);
+    },
+    getDraft: async (draftId: string) => {
+      return ipcRenderer.invoke('designer:get-draft', draftId);
+    },
+    createDraft: async (input: any) => {
+      return ipcRenderer.invoke('designer:create-draft', input);
+    },
+    updateDraft: async (draftId: string, input: any) => {
+      return ipcRenderer.invoke('designer:update-draft', draftId, input);
+    },
+    deleteDraft: async (draftId: string) => {
+      return ipcRenderer.invoke('designer:delete-draft', draftId);
+    },
+    validateDesign: async (definition: any, categoryId?: string) => {
+      return ipcRenderer.invoke('designer:validate-design', definition, categoryId);
+    },
+    compileAndRegister: async (input: any) => {
+      return ipcRenderer.invoke('designer:compile-and-register', input);
     },
   },
 };

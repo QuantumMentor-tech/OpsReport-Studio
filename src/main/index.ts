@@ -13,6 +13,11 @@ import type {
   UpdateTemplateMetadataInput,
   TemplateStatus,
   ImportTemplateOptions,
+  CloneMasterTemplateOptions,
+  InspectTemplateOptions,
+  ReplaceTemplateOptions,
+  SaveExcelMappingsInput,
+  SaveWordMappingsInput,
   CreateReportSessionInput,
   UpdateReportSessionInput,
   SessionListFilter,
@@ -22,7 +27,9 @@ import {
   toStationId,
   toReportCategoryId,
   toTemplateId,
+  toTemplateVersionId,
   toReportSessionId,
+  toMappingProfileId,
 } from '../shared/types/identifiers.ts';
 import { toSerializableError } from '../shared/errors/normalize-error.ts';
 import { DatabaseManager } from '../storage/database/connection.ts';
@@ -31,8 +38,19 @@ import {
   CategoryRepository,
   TemplateMetadataRepository,
   SessionRepository,
+  ExcelMappingRepository,
+  WordMappingRepository,
+  MappingProfileRepository,
+  TemplateDesignerRepository,
 } from '../storage/database/repositories/index.ts';
-import { VaultManager, TemplateImporter } from '../storage/vault/index.ts';
+import {
+  VaultManager,
+  TemplateImporter,
+  TemplateInspector,
+  TemplateHealthService,
+  MappingValidationService,
+  TemplateDesignerService,
+} from '../storage/vault/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -42,6 +60,12 @@ let stationRepo: StationRepository | null = null;
 let categoryRepo: CategoryRepository | null = null;
 let templateRepo: TemplateMetadataRepository | null = null;
 let sessionRepo: SessionRepository | null = null;
+let excelMappingRepo: ExcelMappingRepository | null = null;
+let wordMappingRepo: WordMappingRepository | null = null;
+let profileRepo: MappingProfileRepository | null = null;
+let validationService: MappingValidationService | null = null;
+let designerRepo: TemplateDesignerRepository | null = null;
+let designerService: TemplateDesignerService | null = null;
 let vaultManager: VaultManager | null = null;
 
 const APP_METADATA: AppMetadata = {
@@ -67,8 +91,11 @@ function initializePersistence(): void {
     categoryRepo = new CategoryRepository(db);
     templateRepo = new TemplateMetadataRepository(db);
     sessionRepo = new SessionRepository(db);
+    excelMappingRepo = new ExcelMappingRepository(db);
+    wordMappingRepo = new WordMappingRepository(db);
+    profileRepo = new MappingProfileRepository(db);
     console.info(
-      '[Main] SQLite database, StationRepository, CategoryRepository, TemplateMetadataRepository, and SessionRepository initialized successfully.'
+      '[Main] SQLite database, repositories (Station, Category, TemplateMetadata, Session, ExcelMapping, WordMapping, MappingProfile) initialized successfully.'
     );
 
     // Initialize Master Template Vault (Step 17)
@@ -79,6 +106,30 @@ function initializePersistence(): void {
     } else {
       console.info('[Main] Master Template Vault initialized at:', vaultManager.templatesDir);
     }
+
+    const inspector = TemplateInspector.getInstance(db, vaultManager, templateRepo);
+    validationService = MappingValidationService.getInstance(
+      db,
+      vaultManager,
+      templateRepo,
+      excelMappingRepo,
+      wordMappingRepo,
+      profileRepo,
+      inspector
+    );
+
+    designerRepo = new TemplateDesignerRepository(db);
+    designerService = new TemplateDesignerService(
+      db,
+      vaultManager,
+      undefined,
+      templateRepo,
+      categoryRepo,
+      profileRepo,
+      excelMappingRepo,
+      wordMappingRepo,
+      designerRepo
+    );
   } catch (err) {
     console.error('[Main] Unexpected error initializing persistence:', err);
   }
@@ -472,6 +523,415 @@ function setupIpcHandlers(): void {
       : { ok: false, error: toSerializableError(res.error) };
   });
 
+  ipcMain.handle('templates:get-versions', (_event, templateId: string) => {
+    if (!templateRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = templateRepo.getVersionsByTemplateId(toTemplateId(templateId));
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('templates:get-version-by-id', (_event, versionId: string) => {
+    if (!templateRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = templateRepo.getVersionById(toTemplateVersionId(versionId));
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('templates:get-active-version', (_event, templateId: string) => {
+    if (!templateRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = templateRepo.getActiveVersion(toTemplateId(templateId));
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle(
+    'templates:set-active-version',
+    (_event, templateId: string, versionId: string) => {
+      if (!templateRepo) {
+        return {
+          ok: false,
+          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+        };
+      }
+      const res = templateRepo.setActiveVersion(
+        toTemplateId(templateId),
+        toTemplateVersionId(versionId)
+      );
+      return res.ok
+        ? { ok: true, value: res.value }
+        : { ok: false, error: toSerializableError(res.error) };
+    }
+  );
+
+  ipcMain.handle('templates:clone-master', (_event, options: CloneMasterTemplateOptions) => {
+    if (!templateRepo || !vaultManager) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Vault or database not initialized.' },
+      };
+    }
+
+    // Resolve target version
+    let versionRes;
+    if (options.versionId) {
+      versionRes = templateRepo.getVersionById(toTemplateVersionId(options.versionId));
+    } else if (options.templateId) {
+      versionRes = templateRepo.getActiveVersion(toTemplateId(options.templateId));
+    } else {
+      return {
+        ok: false,
+        error: {
+          code: 'VALIDATION_FAILED',
+          userMessage:
+            'Either versionId or templateId must be supplied to clone a master template.',
+        },
+      };
+    }
+
+    if (!versionRes.ok) {
+      return { ok: false, error: toSerializableError(versionRes.error) };
+    }
+    if (!versionRes.value) {
+      return {
+        ok: false,
+        error: {
+          code: 'TEMPLATE_NOT_FOUND',
+          userMessage: 'Target master template version was not found.',
+        },
+      };
+    }
+
+    const cloneRes = vaultManager.cloneMasterTemplate(versionRes.value, options);
+    return cloneRes.ok
+      ? { ok: true, value: cloneRes.value }
+      : { ok: false, error: toSerializableError(cloneRes.error) };
+  });
+
+  ipcMain.handle('templates:verify-integrity', (_event, versionId: string) => {
+    if (!templateRepo || !vaultManager) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Vault or database not initialized.' },
+      };
+    }
+
+    const versionRes = templateRepo.getVersionById(toTemplateVersionId(versionId));
+    if (!versionRes.ok) {
+      return { ok: false, error: toSerializableError(versionRes.error) };
+    }
+    if (!versionRes.value) {
+      return {
+        ok: false,
+        error: {
+          code: 'TEMPLATE_NOT_FOUND',
+          userMessage: `Template version "${versionId}" not found.`,
+        },
+      };
+    }
+
+    const verifyRes = vaultManager.verifyVersionIntegrity(versionRes.value);
+    return verifyRes.ok
+      ? { ok: true, value: verifyRes.value }
+      : { ok: false, error: toSerializableError(verifyRes.error) };
+  });
+
+  ipcMain.handle('templates:inspect-template', async (_event, options: InspectTemplateOptions) => {
+    const inspector = TemplateInspector.getInstance();
+    const inspectRes = await inspector.inspectTemplate(options);
+    return inspectRes.ok
+      ? { ok: true, value: inspectRes.value }
+      : { ok: false, error: toSerializableError(inspectRes.error) };
+  });
+
+  ipcMain.handle('templates:replace-template', async (_event, options: ReplaceTemplateOptions) => {
+    if (!templateRepo || !categoryRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const db = DatabaseManager.getInstance().getDatabase();
+    const importer = new TemplateImporter(
+      db,
+      vaultManager ?? undefined,
+      templateRepo,
+      categoryRepo
+    );
+    const res = await importer.replaceTemplate(options);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('templates:check-health', (_event, templateId: string) => {
+    if (!templateRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const healthService = TemplateHealthService.getInstance(
+      undefined,
+      vaultManager ?? undefined,
+      templateRepo
+    );
+    const res = healthService.checkTemplateHealth(toTemplateId(templateId));
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('templates:check-all-health', () => {
+    if (!templateRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const healthService = TemplateHealthService.getInstance(
+      undefined,
+      vaultManager ?? undefined,
+      templateRepo
+    );
+    const res = healthService.checkAllTemplatesHealth();
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('templates:get-dependency-count', (_event, templateId: string) => {
+    if (!templateRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = templateRepo.getTemplateReferenceCount(toTemplateId(templateId));
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  // Step 22: Excel Worksheet, Header Row & Cell Mapping IPC Handlers
+  ipcMain.handle(
+    'templates:get-excel-mappings',
+    (_event, templateId: string, versionId: string, worksheetName?: string) => {
+      if (!excelMappingRepo) {
+        return {
+          ok: false,
+          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+        };
+      }
+      const res = excelMappingRepo.getMappings(
+        toTemplateId(templateId),
+        toTemplateVersionId(versionId),
+        worksheetName
+      );
+      return res.ok
+        ? { ok: true, value: res.value }
+        : { ok: false, error: toSerializableError(res.error) };
+    }
+  );
+
+  ipcMain.handle('templates:save-excel-mappings', (_event, input: SaveExcelMappingsInput) => {
+    if (!excelMappingRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = excelMappingRepo.saveMappings(input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle(
+    'templates:delete-excel-mappings',
+    (_event, templateId: string, versionId: string, worksheetName?: string) => {
+      if (!excelMappingRepo) {
+        return {
+          ok: false,
+          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+        };
+      }
+      const res = excelMappingRepo.deleteMappings(
+        toTemplateId(templateId),
+        toTemplateVersionId(versionId),
+        worksheetName
+      );
+      return res.ok
+        ? { ok: true, value: res.value }
+        : { ok: false, error: toSerializableError(res.error) };
+    }
+  );
+
+  ipcMain.handle('templates:get-word-mappings', (_event, templateId: string, versionId: string) => {
+    if (!wordMappingRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = wordMappingRepo.getMappings(
+      toTemplateId(templateId),
+      toTemplateVersionId(versionId)
+    );
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('templates:save-word-mappings', (_event, input: SaveWordMappingsInput) => {
+    if (!wordMappingRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = wordMappingRepo.saveMappings(input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle(
+    'templates:delete-word-mappings',
+    (_event, templateId: string, versionId: string) => {
+      if (!wordMappingRepo) {
+        return {
+          ok: false,
+          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+        };
+      }
+      const res = wordMappingRepo.deleteMappings(
+        toTemplateId(templateId),
+        toTemplateVersionId(versionId)
+      );
+      return res.ok
+        ? { ok: true, value: res.value }
+        : { ok: false, error: toSerializableError(res.error) };
+    }
+  );
+
+  // ---------------------------------------------------------------------------
+  // Step 24: Mapping Profiles & Centralized Validation IPC Handlers
+  // ---------------------------------------------------------------------------
+  ipcMain.handle('profiles:list', (_event, filter?: any) => {
+    if (!profileRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = profileRepo.listProfiles(filter);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('profiles:get', (_event, profileId: string) => {
+    if (!profileRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = profileRepo.getProfile(toMappingProfileId(profileId));
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('profiles:create', (_event, input: any) => {
+    if (!profileRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = profileRepo.createProfile(input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('profiles:update', (_event, profileId: string, updates: any) => {
+    if (!profileRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = profileRepo.updateProfile(toMappingProfileId(profileId), updates);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('profiles:delete', (_event, profileId: string) => {
+    if (!profileRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = profileRepo.deleteProfile(toMappingProfileId(profileId));
+    return res.ok
+      ? { ok: true, value: true }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('profiles:duplicate', (_event, profileId: string, newProfileName: string) => {
+    if (!profileRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = profileRepo.duplicateProfile(toMappingProfileId(profileId), newProfileName);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('profiles:validate', async (_event, input: any) => {
+    if (!validationService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Validation service not initialized.' },
+      };
+    }
+    const res = await validationService.validateProfile({
+      profileId: input.profileId ? toMappingProfileId(input.profileId) : undefined,
+      templateId: toTemplateId(input.templateId),
+      versionId: toTemplateVersionId(input.versionId),
+      categoryId: input.categoryId ? toReportCategoryId(input.categoryId) : undefined,
+      documentType: input.documentType,
+    });
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
   // ---------------------------------------------------------------------------
   // Report Session & Draft Persistence IPC Handlers (Step 16)
   // ---------------------------------------------------------------------------
@@ -623,6 +1083,104 @@ function setupIpcHandlers(): void {
         : { ok: false, error: toSerializableError(res.error) };
     }
   );
+
+  // ---------------------------------------------------------------------------
+  // Template Designer IPC Handlers (Step 25)
+  // ---------------------------------------------------------------------------
+  ipcMain.handle(
+    'designer:list-drafts',
+    (_event, documentType?: any, categoryId?: string) => {
+      if (!designerRepo) {
+        return {
+          ok: false,
+          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+        };
+      }
+      const res = designerRepo.listDrafts(documentType, categoryId);
+      return res.ok
+        ? { ok: true, value: res.value }
+        : { ok: false, error: toSerializableError(res.error) };
+    }
+  );
+
+  ipcMain.handle('designer:get-draft', (_event, draftId: string) => {
+    if (!designerRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = designerRepo.getDraft(draftId);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('designer:create-draft', (_event, input: any) => {
+    if (!designerRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = designerRepo.createDraft(input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('designer:update-draft', (_event, draftId: string, input: any) => {
+    if (!designerRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = designerRepo.updateDraft(draftId, input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('designer:delete-draft', (_event, draftId: string) => {
+    if (!designerRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
+    }
+    const res = designerRepo.deleteDraft(draftId);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle(
+    'designer:validate-design',
+    (_event, definition: any, categoryId?: string) => {
+      if (!designerService) {
+        return {
+          ok: false,
+          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Designer service not initialized.' },
+        };
+      }
+      const res = designerService.validateDesign(definition, categoryId);
+      return { ok: true, value: res };
+    }
+  );
+
+  ipcMain.handle('designer:compile-and-register', async (_event, input: any) => {
+    if (!designerService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Designer service not initialized.' },
+      };
+    }
+    const res = await designerService.compileAndRegister(input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
 }
 
 function createWindow(): void {
