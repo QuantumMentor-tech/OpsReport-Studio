@@ -39,9 +39,4 @@ export const migration008: Migration = {
       CREATE INDEX IF NOT EXISTS idx_design_drafts_type ON template_design_drafts(document_type);
     `);
   },
-  down: (db: Database.Database) => {
-    db.exec(`
-      DROP TABLE IF EXISTS template_design_drafts;
-    `);
-  },
 };

@@ -16,3 +16,4 @@ export * from './excel-mapping.ts';
 export * from './word-mapping.ts';
 export * from './mapping-profile.ts';
 export * from './template-designer.ts';
+export * from './generation.ts';

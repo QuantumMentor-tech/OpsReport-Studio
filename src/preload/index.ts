@@ -255,6 +255,23 @@ const bridgeAPI: OpsReportBridgeAPI = {
       return ipcRenderer.invoke('designer:compile-and-register', input);
     },
   },
+  generation: {
+    prepareExcelWorkspace: async (options: any) => {
+      return ipcRenderer.invoke('generation:prepare-excel-workspace', options);
+    },
+    getWorkspace: async (workspaceId: string) => {
+      return ipcRenderer.invoke('generation:get-workspace', workspaceId);
+    },
+    discardWorkspace: async (workspaceId: string) => {
+      return ipcRenderer.invoke('generation:discard-workspace', workspaceId);
+    },
+    getActiveWorkspaceForSession: async (sessionId: string) => {
+      return ipcRenderer.invoke('generation:get-active-workspace-for-session', sessionId);
+    },
+    injectExcelData: async (options: any) => {
+      return ipcRenderer.invoke('generation:inject-excel-data', options);
+    },
+  },
 };
 
 contextBridge.exposeInMainWorld('opsreport', bridgeAPI);

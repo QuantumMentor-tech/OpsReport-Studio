@@ -8,12 +8,14 @@ export * from './database/index.ts';
 export {
   TEMPLATES_SUBDIR,
   SCRATCH_SUBDIR,
+  WORKSPACE_SUBDIR,
   REPORTS_SUBDIR,
   LOGS_SUBDIR,
   BACKUPS_SUBDIR,
   resolveAppDataRoot,
   resolveTemplatesDirectory,
   resolveScratchDirectory,
+  resolveWorkspaceDirectory,
   resolveReportsDirectory,
   resolveLogsDirectory,
   resolveBackupsDirectory,
@@ -30,3 +32,4 @@ export {
   validateDocumentFile,
   TemplateImporter,
 } from './vault/index.ts';
+export * from './generation/index.ts';

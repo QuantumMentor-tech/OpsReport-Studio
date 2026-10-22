@@ -1,4 +1,5 @@
 # OpsReport Studio — Step 19 Implementation Report
+
 ## Immutable Master Templates, Safe Cloning & Template Versioning
 
 **Document Identifier:** DEV-STEP-19-REPORT  
@@ -6,7 +7,7 @@
 **Approved Product Name:** OpsReport Studio  
 **Lifecycle Step:** Step 19 of 45 (Immutable Master Templates, Safe Cloning & Template Versioning)  
 **Execution Date:** 2026-10-21  
-**Implementation Standard:** Senior Desktop Application Architect, Senior Filesystem and Data Integrity Engineer, Senior Database Engineer, Senior Document-Processing Engineer, Senior Application Security Engineer, Senior QA Automation Engineer  
+**Implementation Standard:** Senior Desktop Application Architect, Senior Filesystem and Data Integrity Engineer, Senior Database Engineer, Senior Document-Processing Engineer, Senior Application Security Engineer, Senior QA Automation Engineer
 
 ---
 
@@ -15,6 +16,7 @@
 Step 19 establishes the authoritative template versioning, master immutability, and copy-first cloning architecture for OpsReport Studio.
 
 Key capabilities delivered:
+
 1. **Two-Tier Template Architecture:**
    - **Logical Template:** Represented by `template_metadata`, preserving the enduring business identity (`template_id`), human title, report category association (`category_id`), document format, lifecycle status, active version pointer (`active_version_id`), and total version count (`total_versions`).
    - **Physical Immutable Version:** Represented by the new relational `template_versions` table, capturing specific accepted revisions with deterministic sequential version numbers (`version_number` >= 1), managed vault filename (`file_name`), cryptographic SHA-256 fingerprint (`sha256_hash`), file size in bytes, change notes, active status, and creation timestamp.
@@ -45,11 +47,13 @@ Key capabilities delivered:
 ### B. Files Created or Modified
 
 #### Files Created:
+
 1. `src/storage/database/migrations/004_template_versioning_and_immutability.ts`: Database migration 004 creating the `template_versions` table with foreign keys, unique constraints, and indexes, extending `template_metadata` with `active_version_id` and `total_versions`, and migrating existing templates to version 1.
 2. `tests/unit/template-immutability-and-versioning.test.ts`: Automated test suite with 9 dedicated unit and integration tests covering read-only attributes, metadata immutability, tampering detection, safe cloning, Word/Excel byte equality, missing file rejection, version seeding, sequential version allocation, and deterministic active version switching.
 3. `docs/development/STEP_19_TEMPLATE_VERSIONING_REPORT.md`: This comprehensive implementation and verification report.
 
 #### Files Modified:
+
 1. `src/shared/types/identifiers.ts`: Added branded type `TemplateVersionId` and constructor helper `toTemplateVersionId`.
 2. `src/shared/types/templates.ts`: Extended `TemplateMetadataRecord` with `active_version_id` and `total_versions`; added `TemplateVersionRecord`, `CreateTemplateVersionInput`, `CloneMasterTemplateOptions`, `CloneMasterTemplateResult`, and `TemplateIntegrityCheckResult`.
 3. `src/shared/types/metadata.ts`: Extended `TemplateBridgeAPI` and `VaultBridgeAPI` with versioning, cloning, and integrity verification methods.
@@ -123,6 +127,7 @@ The versioning model establishes a strict distinction between the logical templa
 ### E. Cloning Behavior
 
 The safe cloning service (`VaultManager.cloneMasterTemplate()`) operates under the following contract:
+
 1. **Source Resolution & Integrity:** Resolves the master template version file in `Templates/` and computes its source SHA-256 hash.
 2. **Safe Destination Allocation:** Generates a unique, non-colliding destination path inside the ephemeral Scratch sandbox (`%LOCALAPPDATA%\OpsReportStudio\Scratch\{purpose}_{templateId}_v{version}_{timestamp}_{random}.{ext}`).
 3. **Boundary Assertion:** Validates that the destination is outside `Templates/` (`assertTargetNotInsideVault`).
@@ -143,13 +148,13 @@ The safe cloning service (`VaultManager.cloneMasterTemplate()`) operates under t
 
 ### G. Tests and Build Results
 
-| Verification Command | Type | Result | Scope / Details |
-| :--- | :--- | :--- | :--- |
-| `npm test` | Unit & Integration | **PASS (196/196 passed across 27 test files)** | All 9 Step 19 tests passed; all 187 regression tests passed. |
-| `npm run typecheck` | TypeScript Compiler | **PASS (0 errors)** | Verified Node (main/preload) and Web (renderer) targets. |
-| `npm run lint` | ESLint 10 | **PASS (0 errors, 0 warnings)** | Strict ESLint rules enforced across all files. |
-| `npm run format:check` | Prettier | **PASS (100% compliant)** | All codebase files adhere to Prettier styling. |
-| `npm run build` | Vite & Electron Bundle | **PASS** | Dist web bundle (268 kB) and Electron main (398 kB) compiled cleanly. |
+| Verification Command   | Type                   | Result                                         | Scope / Details                                                       |
+| :--------------------- | :--------------------- | :--------------------------------------------- | :-------------------------------------------------------------------- |
+| `npm test`             | Unit & Integration     | **PASS (196/196 passed across 27 test files)** | All 9 Step 19 tests passed; all 187 regression tests passed.          |
+| `npm run typecheck`    | TypeScript Compiler    | **PASS (0 errors)**                            | Verified Node (main/preload) and Web (renderer) targets.              |
+| `npm run lint`         | ESLint 10              | **PASS (0 errors, 0 warnings)**                | Strict ESLint rules enforced across all files.                        |
+| `npm run format:check` | Prettier               | **PASS (100% compliant)**                      | All codebase files adhere to Prettier styling.                        |
+| `npm run build`        | Vite & Electron Bundle | **PASS**                                       | Dist web bundle (268 kB) and Electron main (398 kB) compiled cleanly. |
 
 ---
 
@@ -180,25 +185,25 @@ The safe cloning service (`VaultManager.cloneMasterTemplate()`) operates under t
 
 ### K. Acceptance Checklist
 
-| # | Acceptance Criterion | Status | Verification Evidence |
-| :--- | :--- | :--- | :--- |
-| 1 | Stable identities & controlled storage references for master versions | **PASSED** | Branded `TemplateVersionId`, `template_versions` table, `resolveTemplateVersionVaultPath`. |
-| 2 | Ordinary operations cannot silently modify accepted master files in-place | **PASSED** | Service-level write prohibitions; OS read-only mode (`0o444`); test `IMM-01`, `IMM-02`. |
-| 3 | New versions registered as distinct records in approved model | **PASSED** | Relational `template_versions` table; atomic `registerNewVersion()` method; test `VER-02`. |
-| 4 | Creating new version never overwrites or deletes earlier versions | **PASSED** | Distinct version filenames (`{templateId}_v{versionNumber}.{ext}`); test `VER-02`. |
-| 5 | Version identifiers and ordering follow deterministic policy | **PASSED** | 1-based sequential integers (`1, 2, 3...`); `VER-{templateId}-V{n}`; test `VER-02`. |
-| 6 | Concurrent version creation cannot silently produce duplicate version numbers | **PASSED** | SQLite unique constraint `UNIQUE(template_id, version_number)` + atomic transaction. |
-| 7 | Current-version promotion occurs only after successful asset finalization | **PASSED** | Promoted and hashed prior to SQLite update; test `VER-02`, `VER-03`. |
-| 8 | Application can resolve and retrieve specific version by stable ID | **PASSED** | `templateRepo.getVersionById()`, `vaultManager.resolveTemplateFileVaultPath()`. |
-| 9 | Safe cloning service creates independent copy in approved destination | **PASSED** | `VaultManager.cloneMasterTemplate()` in Scratch sandbox; test `CLN-01`, `CLN-02`. |
-| 10 | Cloning rejects invalid/out-of-bound paths; cannot overwrite master | **PASSED** | `assertTargetNotInsideVault()` enforced; test `CLN-01`. |
-| 11 | Source and destination bytes verified according to integrity policy | **PASSED** | SHA-256 hash match verified on clone; test `CLN-01`, `CLN-02`. |
-| 12 | Failed copy/validation preserves source master and previous versions | **PASSED** | Source file is read-only; unlinks partial destination on error; test `CLN-03`. |
-| 13 | Filesystem and database operations leave coherent state | **PASSED** | Atomic SQLite transactions; consistent rollback protocol; test `IMM-03`. |
-| 14 | Existing import and template metadata functionality remains intact | **PASSED** | Tests `IMP-01` through `IMP-07` passing; Step 18 fully preserved. |
-| 15 | Database migrations preserve existing data and relationships | **PASSED** | Migration 004 seeds v1 for existing templates without data loss; test `MIG-07`. |
-| 16 | Tests cover immutability, cloning, versioning, and failure scenarios | **PASSED** | `tests/unit/template-immutability-and-versioning.test.ts` (9 tests passing). |
-| 17 | Relevant tests, typechecks, linter, and builds have actually run | **PASSED** | 196 tests passed; TypeScript 0 errors; ESLint clean; build passed. |
-| 18 | No version-history UI, mapping wizard, or generator built prematurely | **PASSED** | Strictly scoped to Step 19 foundation. |
-| 19 | No unrelated database reset or destructive file operations occurred | **PASSED** | Additive migration; zero database drops; isolated test fixtures. |
-| 20 | Final implementation report accurately identifies completed work | **PASSED** | This completion report. |
+| #   | Acceptance Criterion                                                          | Status     | Verification Evidence                                                                      |
+| :-- | :---------------------------------------------------------------------------- | :--------- | :----------------------------------------------------------------------------------------- |
+| 1   | Stable identities & controlled storage references for master versions         | **PASSED** | Branded `TemplateVersionId`, `template_versions` table, `resolveTemplateVersionVaultPath`. |
+| 2   | Ordinary operations cannot silently modify accepted master files in-place     | **PASSED** | Service-level write prohibitions; OS read-only mode (`0o444`); test `IMM-01`, `IMM-02`.    |
+| 3   | New versions registered as distinct records in approved model                 | **PASSED** | Relational `template_versions` table; atomic `registerNewVersion()` method; test `VER-02`. |
+| 4   | Creating new version never overwrites or deletes earlier versions             | **PASSED** | Distinct version filenames (`{templateId}_v{versionNumber}.{ext}`); test `VER-02`.         |
+| 5   | Version identifiers and ordering follow deterministic policy                  | **PASSED** | 1-based sequential integers (`1, 2, 3...`); `VER-{templateId}-V{n}`; test `VER-02`.        |
+| 6   | Concurrent version creation cannot silently produce duplicate version numbers | **PASSED** | SQLite unique constraint `UNIQUE(template_id, version_number)` + atomic transaction.       |
+| 7   | Current-version promotion occurs only after successful asset finalization     | **PASSED** | Promoted and hashed prior to SQLite update; test `VER-02`, `VER-03`.                       |
+| 8   | Application can resolve and retrieve specific version by stable ID            | **PASSED** | `templateRepo.getVersionById()`, `vaultManager.resolveTemplateFileVaultPath()`.            |
+| 9   | Safe cloning service creates independent copy in approved destination         | **PASSED** | `VaultManager.cloneMasterTemplate()` in Scratch sandbox; test `CLN-01`, `CLN-02`.          |
+| 10  | Cloning rejects invalid/out-of-bound paths; cannot overwrite master           | **PASSED** | `assertTargetNotInsideVault()` enforced; test `CLN-01`.                                    |
+| 11  | Source and destination bytes verified according to integrity policy           | **PASSED** | SHA-256 hash match verified on clone; test `CLN-01`, `CLN-02`.                             |
+| 12  | Failed copy/validation preserves source master and previous versions          | **PASSED** | Source file is read-only; unlinks partial destination on error; test `CLN-03`.             |
+| 13  | Filesystem and database operations leave coherent state                       | **PASSED** | Atomic SQLite transactions; consistent rollback protocol; test `IMM-03`.                   |
+| 14  | Existing import and template metadata functionality remains intact            | **PASSED** | Tests `IMP-01` through `IMP-07` passing; Step 18 fully preserved.                          |
+| 15  | Database migrations preserve existing data and relationships                  | **PASSED** | Migration 004 seeds v1 for existing templates without data loss; test `MIG-07`.            |
+| 16  | Tests cover immutability, cloning, versioning, and failure scenarios          | **PASSED** | `tests/unit/template-immutability-and-versioning.test.ts` (9 tests passing).               |
+| 17  | Relevant tests, typechecks, linter, and builds have actually run              | **PASSED** | 196 tests passed; TypeScript 0 errors; ESLint clean; build passed.                         |
+| 18  | No version-history UI, mapping wizard, or generator built prematurely         | **PASSED** | Strictly scoped to Step 19 foundation.                                                     |
+| 19  | No unrelated database reset or destructive file operations occurred           | **PASSED** | Additive migration; zero database drops; isolated test fixtures.                           |
+| 20  | Final implementation report accurately identifies completed work              | **PASSED** | This completion report.                                                                    |

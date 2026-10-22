@@ -22,11 +22,12 @@ import { migration005 } from './005_excel_template_mappings.ts';
 import { migration006 } from './006_word_template_mappings.ts';
 import { migration007 } from './007_mapping_profiles.ts';
 import { migration008 } from './008_template_designer_drafts.ts';
+import { migration009 } from './009_generation_workspaces.ts';
 import { Result, Ok, Err } from '../../../shared/types/result.ts';
 import { AppError } from '../../../shared/errors/app-error.ts';
 import { ErrorCode } from '../../../shared/errors/error-codes.ts';
 
-export const CURRENT_SCHEMA_VERSION = 8;
+export const CURRENT_SCHEMA_VERSION = 9;
 
 /**
  * Ordered list of all registered schema migrations.
@@ -40,6 +41,7 @@ export const ALL_MIGRATIONS: readonly Migration[] = [
   migration006,
   migration007,
   migration008,
+  migration009,
 ];
 
 /**

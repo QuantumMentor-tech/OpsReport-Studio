@@ -14,17 +14,9 @@
  */
 
 import PizZip from 'pizzip';
-import type {
-  ExcelWorkbookDesign,
-  ExcelWorksheetDesign,
-  ExcelCellDesign,
-} from '../../shared/types/template-designer.ts';
+import type { ExcelWorkbookDesign, ExcelCellDesign } from '../../shared/types/template-designer.ts';
 import { CELL_ADDRESS_REGEX } from '../database/repositories/excel-mapping-repository.ts';
-import {
-  parseCellAddress,
-  colLetterToIndex,
-  indexToColLetter,
-} from './template-inspector.ts';
+import { parseCellAddress, colLetterToIndex, indexToColLetter } from './template-inspector.ts';
 import { Result, Ok, Err } from '../../shared/types/result.ts';
 import { AppError } from '../../shared/errors/app-error.ts';
 import { ErrorCode } from '../../shared/errors/error-codes.ts';
@@ -42,9 +34,7 @@ export class ExcelTemplateBuilder {
   /**
    * Compiles an ExcelWorkbookDesign into an Open XML (.xlsx) ZIP buffer.
    */
-  public static buildWorkbook(
-    design: ExcelWorkbookDesign
-  ): Result<Buffer, AppError> {
+  public static buildWorkbook(design: ExcelWorkbookDesign): Result<Buffer, AppError> {
     try {
       if (!design.worksheets || design.worksheets.length === 0) {
         return Err(
@@ -150,14 +140,14 @@ export class ExcelTemplateBuilder {
           const parsed = parseCellAddress(cell.coordinate);
           if (!parsed) continue;
 
-          minCol = Math.min(minCol, parsed.columnIndex);
-          maxCol = Math.max(maxCol, parsed.columnIndex);
-          minRow = Math.min(minRow, parsed.rowNumber);
-          maxRow = Math.max(maxRow, parsed.rowNumber);
+          minCol = Math.min(minCol, parsed.colIndex);
+          maxCol = Math.max(maxCol, parsed.colIndex);
+          minRow = Math.min(minRow, parsed.rowIndex);
+          maxRow = Math.max(maxRow, parsed.rowIndex);
 
-          const list = rowMap.get(parsed.rowNumber) ?? [];
+          const list = rowMap.get(parsed.rowIndex) ?? [];
           list.push(cell);
-          rowMap.set(parsed.rowNumber, list);
+          rowMap.set(parsed.rowIndex, list);
         }
 
         const sortedRows = Array.from(rowMap.keys()).sort((a, b) => a - b);
@@ -184,7 +174,7 @@ export class ExcelTemplateBuilder {
           cells.sort((a, b) => {
             const pa = parseCellAddress(a.coordinate)!;
             const pb = parseCellAddress(b.coordinate)!;
-            return pa.columnIndex - pb.columnIndex;
+            return pa.colIndex - pb.colIndex;
           });
 
           sheetDataXml += `<row r="${rowNum}">`;
@@ -323,7 +313,7 @@ export class ExcelTemplateBuilder {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.FILE_WRITE_ERROR,
+          code: ErrorCode.INTERNAL_UNEXPECTED,
           userMessage: 'Failed to compile Excel workbook Open XML package.',
           details: { error: String(err) },
           cause: err,

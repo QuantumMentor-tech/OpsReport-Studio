@@ -1,4 +1,5 @@
 # OpsReport Studio — Step 17 Implementation Report
+
 ## Master Template Vault & Organized File Storage
 
 **Document Identifier:** DEV-STEP-17-REPORT  
@@ -6,7 +7,7 @@
 **Approved Product Name:** OpsReport Studio  
 **Lifecycle Step:** Step 17 of 45 (Master Template Vault & Organized File Storage)  
 **Execution Date:** 2026-10-20  
-**Implementation Standard:** Senior Desktop Application Architect, Senior Filesystem and Storage Engineer, Senior Database Engineer, Senior Application Security Engineer, Senior UI/UX Engineer, Senior QA Automation Engineer  
+**Implementation Standard:** Senior Desktop Application Architect, Senior Filesystem and Storage Engineer, Senior Database Engineer, Senior Application Security Engineer, Senior UI/UX Engineer, Senior QA Automation Engineer
 
 ---
 
@@ -15,6 +16,7 @@
 Step 17 establishes the authoritative, secure, application-managed storage foundation for reusable operational report templates in OpsReport Studio.
 
 Key capabilities delivered:
+
 1. **Application-Managed Storage Subsystem:** Centralized `VaultManager` singleton resolves the canonical application-owned storage root (`%LOCALAPPDATA%\OpsReportStudio` on Windows, with compliant cross-platform fallbacks for macOS/Linux and isolated test environments).
 2. **Deterministic Physical Layout & Separation:** Complete physical separation among:
    - **Master Template Vault:** Dedicated directory for immutable, reusable master templates (`Templates/`).
@@ -36,6 +38,7 @@ Key capabilities delivered:
 ## B. Files Created or Modified
 
 ### Files Created:
+
 1. `src/shared/types/storage.ts`: Defines `StorageDirectoryStatus`, `VaultStorageStatus`, `TemplateFileDescriptor`, and storage status response models.
 2. `src/storage/vault/vault-config.ts`: Directory constants and canonical path resolvers (`resolveAppDataRoot`, `resolveTemplatesDirectory`, `resolveScratchDirectory`, `resolveReportsDirectory`, `resolveDatabaseDirectory`, `resolveLogsDirectory`, `resolveBackupsDirectory`).
 3. `src/storage/vault/path-security.ts`: Security enforcement module implementing `validateInternalIdentifier`, `assertNoNullBytes`, `isPathInsideRoot`, `assertPathInsideRoot`, `assertTargetNotInsideVault`, and `normalizeTemplateExtension`.
@@ -48,6 +51,7 @@ Key capabilities delivered:
 10. `docs/development/STEP_17_MASTER_TEMPLATE_VAULT_REPORT.md`: This comprehensive implementation, audit, and verification report.
 
 ### Files Modified:
+
 1. `src/shared/types/index.ts`: Re-exported storage types.
 2. `src/shared/types/metadata.ts`: Added `VaultBridgeAPI` interface and wired `vault` property into `OpsReportBridgeAPI`.
 3. `src/preload/index.ts`: Exposed context-isolated `window.opsreport.vault` bridge methods (`getStatus`, `initialize`, `checkTemplateExists`).
@@ -86,6 +90,7 @@ The application-managed storage layout strictly conforms to Windows desktop conv
 ```
 
 ### Storage Distinction Guarantees:
+
 - **Masters vs. Outputs:** Reusable master templates reside strictly under `Templates/`. Generated reports will reside under `Reports/` (or user-chosen export destinations). Output path resolution rejects any attempt to place an output inside `Templates/` (`assertTargetNotInsideVault`).
 - **Masters vs. Scratch:** Temporary extraction and staging files reside strictly under `Scratch/` and are purged automatically on startup if older than 15 minutes.
 - **Masters vs. Database:** Structured metadata resides in `Database/opsreport.db`. No template binary content is stored as BLOBs in the database; files reside strictly on the filesystem.
@@ -120,6 +125,7 @@ The centralized `VaultManager` (`src/storage/vault/vault-manager.ts`) provides a
 ## E. Database and Metadata Impact
 
 ### Schema Status:
+
 - **Current Schema Version:** 3 (unchanged).
 - **Migrations Introduced:** None (Migration 003 remains the latest).
 - **Reasoning:** In Step 15, Migration 002 established the relational `template_metadata` table with columns `template_id VARCHAR(64) PRIMARY KEY`, `category_id`, `template_name`, `document_type`, `file_name`, and `status`. Step 17 maps physical files directly to `template_id` (`{templateId}.{xlsx|docx}`). Metadata and physical file existence are kept decoupled: a database record represents registered metadata; physical file presence is independently checked via `checkTemplateFileExists` or `getTemplateFileDescriptor`.
@@ -150,6 +156,7 @@ The centralized `VaultManager` (`src/storage/vault/vault-manager.ts`) provides a
 ## G. Tests and Builds
 
 ### 1. Test Suite Execution (`npm test`):
+
 - **Command:** `npm test` (vitest run)
 - **Result:** **PASSED (24 test files, 164 tests passed, 0 failed, 100% green)**
   - `tests/unit/vault-manager.test.ts`: 12 passed
@@ -173,18 +180,22 @@ The centralized `VaultManager` (`src/storage/vault/vault-manager.ts`) provides a
   - All other unit and smoke test suites passed.
 
 ### 2. Static Type Checks (`npm run typecheck`):
+
 - **Command:** `tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json`
 - **Result:** **PASSED (0 errors across Node and Web targets)**
 
 ### 3. Code Linter (`npm run lint`):
+
 - **Command:** `eslint .`
 - **Result:** **PASSED (0 warnings, 0 errors)**
 
 ### 4. Code Formatter Check (`npm run format:check`):
+
 - **Command:** `prettier --check "src/**/*.{ts,tsx,css}" "tests/**/*.{ts,tsx}"`
 - **Result:** **PASSED (All matched files use Prettier code style)**
 
 ### 5. Production Application Build (`npm run build`):
+
 - **Command:** `npm run build`
 - **Result:** **PASSED**
   - Renderer bundle: `dist/index.html` (0.65 kB), `dist/assets/index-BfoUYq2n.js` (254.66 kB), `dist/assets/index-B8r_yRdf.css` (9.00 kB).
@@ -195,15 +206,15 @@ The centralized `VaultManager` (`src/storage/vault/vault-manager.ts`) provides a
 
 ## H. Regression Verification
 
-| Component / Subsystem | Previous Step Baseline | Post-Step 17 Verification Result |
-| :--- | :--- | :--- |
-| **Database Engine & PRAGMAs** | Step 13 (WAL, Foreign Keys ON, 5000ms timeout) | **Verified Intact:** `database-init.test.ts` passes; PRAGMAs active. |
-| **Migrations Subsystem** | Step 13/15/16 (Version 3) | **Verified Intact:** `migrations.test.ts` passes; schema v3 intact. |
-| **Station Ordering & Persistence** | Step 14 (Contiguous 1..N ordinal sequence) | **Verified Intact:** `station-repository.test.ts` & `stations-view.test.tsx` pass. |
-| **Category Registry & Lifecycle** | Step 15 (7 Categories, deletion guards) | **Verified Intact:** `category-repository.test.ts` & `category-client.test.ts` pass. |
-| **Template Metadata Registry** | Step 15 (7 Seeded template descriptors) | **Verified Intact:** `template-metadata-repository.test.ts` passes. |
-| **Report Session Draft Persistence** | Step 16 (Frozen station snapshots, JSON drafts) | **Verified Intact:** `session-repository.test.ts` & `session-client.test.ts` pass. |
-| **Application Shell & Theming** | Step 11/12 (WCAG AA Dark/Light themes, nav) | **Verified Intact:** `shell.test.tsx` & `design-system.test.ts` pass. |
+| Component / Subsystem                | Previous Step Baseline                          | Post-Step 17 Verification Result                                                     |
+| :----------------------------------- | :---------------------------------------------- | :----------------------------------------------------------------------------------- |
+| **Database Engine & PRAGMAs**        | Step 13 (WAL, Foreign Keys ON, 5000ms timeout)  | **Verified Intact:** `database-init.test.ts` passes; PRAGMAs active.                 |
+| **Migrations Subsystem**             | Step 13/15/16 (Version 3)                       | **Verified Intact:** `migrations.test.ts` passes; schema v3 intact.                  |
+| **Station Ordering & Persistence**   | Step 14 (Contiguous 1..N ordinal sequence)      | **Verified Intact:** `station-repository.test.ts` & `stations-view.test.tsx` pass.   |
+| **Category Registry & Lifecycle**    | Step 15 (7 Categories, deletion guards)         | **Verified Intact:** `category-repository.test.ts` & `category-client.test.ts` pass. |
+| **Template Metadata Registry**       | Step 15 (7 Seeded template descriptors)         | **Verified Intact:** `template-metadata-repository.test.ts` passes.                  |
+| **Report Session Draft Persistence** | Step 16 (Frozen station snapshots, JSON drafts) | **Verified Intact:** `session-repository.test.ts` & `session-client.test.ts` pass.   |
+| **Application Shell & Theming**      | Step 11/12 (WCAG AA Dark/Light themes, nav)     | **Verified Intact:** `shell.test.tsx` & `design-system.test.ts` pass.                |
 
 ---
 
@@ -227,28 +238,28 @@ The centralized `VaultManager` (`src/storage/vault/vault-manager.ts`) provides a
 
 ## K. Acceptance Checklist
 
-| # | Acceptance Criterion | Status | Verification Evidence |
-| :---: | :--- | :---: | :--- |
-| 1 | Vault location resolved through approved runtime data-directory API | **Passed** | `resolveAppDataRoot` resolves `%LOCALAPPDATA%\OpsReportStudio` on Windows |
-| 2 | Persistent storage does not depend on working directory or hardcoded developer path | **Passed** | Standard OS API used; verified in `vault-config.ts` |
-| 3 | Clear separation among masters, staging, outputs, and database storage | **Passed** | Physical subdirectories `Templates/`, `Scratch/`, `Reports/`, `Database/` verified in `VLT-02` |
-| 4 | Only justified directories initialized | **Passed** | Exactly 7 approved directories initialized; verified in `VLT-01` |
-| 5 | Initialization is idempotent and preserves existing valid files | **Passed** | Idempotence verified in `VLT-01`; existing files preserved |
-| 6 | Centralized storage abstraction controls approved managed-path resolution | **Passed** | `VaultManager` encapsulates all path resolution; UI components cannot craft raw paths |
-| 7 | Stable internal identifiers, not display names, determine storage identities | **Passed** | `resolveTemplateVaultPath` uses `templateId`, verified in `VLT-04` |
-| 8 | Path validation prevents traversal outside root and handles platform separators | **Passed** | `assertPathInsideRoot` rejects traversal and null bytes; verified in `VLT-05`, `VLT-06` |
-| 9 | Permission failures and unexpected filesystem states handled safely | **Passed** | Regular file collisions return `FILE_ACCESS_DENIED`; verified in `VLT-03` |
-| 10 | Initialization does not scan arbitrary user folders or import documents | **Passed** | No scanning implemented; vault starts empty truthfully |
-| 11 | Template metadata and actual file existence are not confused | **Passed** | `checkTemplateFileExists` and `getTemplateFileDescriptor` independently verify disk state |
-| 12 | Existing data and relationships remain intact | **Passed** | All 147 pre-existing tests pass; 0 data regressions |
-| 13 | Schema changes are minimal, justified, tested, and backward-compatible | **Passed** | Zero schema change required; schema remains version 3 |
-| 14 | Storage status integrated without duplicate template-management screens | **Passed** | Status card rendered in existing `TemplatesView.tsx`; verified in `templates-view.test.tsx` |
-| 15 | Automated tests cover initialization, path resolution, traversal, separation | **Passed** | 17 new automated tests in `vault-manager.test.ts` and `vault-client.test.ts` |
-| 16 | Relevant tests and builds have actually run with verified pass results | **Passed** | 164/164 tests pass; typecheck, lint, format:check, and build 100% green |
-| 17 | Steps 13 through 16 remain functional | **Passed** | Stations, categories, templates, and sessions remain 100% functional |
-| 18 | No template parsing, import, cloning/versioning implemented prematurely | **Passed** | Strict stop boundary enforced; import and parsing excluded |
-| 19 | No original user document has been overwritten, moved, or deleted | **Passed** | `assertTargetNotInsideVault` enforced; zero user file tampering |
-| 20 | Implementation is maintainable and free of regressions | **Passed** | Clean TypeScript, zero lint warnings, modular architecture |
+|  #  | Acceptance Criterion                                                                |   Status   | Verification Evidence                                                                          |
+| :-: | :---------------------------------------------------------------------------------- | :--------: | :--------------------------------------------------------------------------------------------- |
+|  1  | Vault location resolved through approved runtime data-directory API                 | **Passed** | `resolveAppDataRoot` resolves `%LOCALAPPDATA%\OpsReportStudio` on Windows                      |
+|  2  | Persistent storage does not depend on working directory or hardcoded developer path | **Passed** | Standard OS API used; verified in `vault-config.ts`                                            |
+|  3  | Clear separation among masters, staging, outputs, and database storage              | **Passed** | Physical subdirectories `Templates/`, `Scratch/`, `Reports/`, `Database/` verified in `VLT-02` |
+|  4  | Only justified directories initialized                                              | **Passed** | Exactly 7 approved directories initialized; verified in `VLT-01`                               |
+|  5  | Initialization is idempotent and preserves existing valid files                     | **Passed** | Idempotence verified in `VLT-01`; existing files preserved                                     |
+|  6  | Centralized storage abstraction controls approved managed-path resolution           | **Passed** | `VaultManager` encapsulates all path resolution; UI components cannot craft raw paths          |
+|  7  | Stable internal identifiers, not display names, determine storage identities        | **Passed** | `resolveTemplateVaultPath` uses `templateId`, verified in `VLT-04`                             |
+|  8  | Path validation prevents traversal outside root and handles platform separators     | **Passed** | `assertPathInsideRoot` rejects traversal and null bytes; verified in `VLT-05`, `VLT-06`        |
+|  9  | Permission failures and unexpected filesystem states handled safely                 | **Passed** | Regular file collisions return `FILE_ACCESS_DENIED`; verified in `VLT-03`                      |
+| 10  | Initialization does not scan arbitrary user folders or import documents             | **Passed** | No scanning implemented; vault starts empty truthfully                                         |
+| 11  | Template metadata and actual file existence are not confused                        | **Passed** | `checkTemplateFileExists` and `getTemplateFileDescriptor` independently verify disk state      |
+| 12  | Existing data and relationships remain intact                                       | **Passed** | All 147 pre-existing tests pass; 0 data regressions                                            |
+| 13  | Schema changes are minimal, justified, tested, and backward-compatible              | **Passed** | Zero schema change required; schema remains version 3                                          |
+| 14  | Storage status integrated without duplicate template-management screens             | **Passed** | Status card rendered in existing `TemplatesView.tsx`; verified in `templates-view.test.tsx`    |
+| 15  | Automated tests cover initialization, path resolution, traversal, separation        | **Passed** | 17 new automated tests in `vault-manager.test.ts` and `vault-client.test.ts`                   |
+| 16  | Relevant tests and builds have actually run with verified pass results              | **Passed** | 164/164 tests pass; typecheck, lint, format:check, and build 100% green                        |
+| 17  | Steps 13 through 16 remain functional                                               | **Passed** | Stations, categories, templates, and sessions remain 100% functional                           |
+| 18  | No template parsing, import, cloning/versioning implemented prematurely             | **Passed** | Strict stop boundary enforced; import and parsing excluded                                     |
+| 19  | No original user document has been overwritten, moved, or deleted                   | **Passed** | `assertTargetNotInsideVault` enforced; zero user file tampering                                |
+| 20  | Implementation is maintainable and free of regressions                              | **Passed** | Clean TypeScript, zero lint warnings, modular architecture                                     |
 
 ---
 

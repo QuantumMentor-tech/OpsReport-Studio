@@ -19,7 +19,6 @@ import type {
   DesignerDraftSummary,
   CreateDesignerDraftInput,
   UpdateDesignerDraftInput,
-  TemplateDesignDefinition,
 } from '../../../shared/types/template-designer.ts';
 import { CURRENT_DESIGN_SCHEMA_VERSION } from '../../../shared/types/template-designer.ts';
 import { Result, Ok, Err } from '../../../shared/types/result.ts';
@@ -59,10 +58,7 @@ export class TemplateDesignerRepository {
         );
       }
 
-      if (
-        input.documentType !== 'EXCEL_WORKBOOK' &&
-        input.documentType !== 'WORD_DOCUMENT'
-      ) {
+      if (input.documentType !== 'EXCEL_WORKBOOK' && input.documentType !== 'WORD_DOCUMENT') {
         return Err(
           new AppError({
             code: ErrorCode.VALIDATION_FAILED,
@@ -138,7 +134,7 @@ export class TemplateDesignerRepository {
       if (!created.ok || !created.value) {
         return Err(
           new AppError({
-            code: ErrorCode.DATABASE_ERROR,
+            code: ErrorCode.PERSISTENCE_FAILED,
             userMessage: 'Failed to retrieve draft immediately after creation.',
             isOperational: true,
           })
@@ -149,7 +145,7 @@ export class TemplateDesignerRepository {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.DATABASE_ERROR,
+          code: ErrorCode.PERSISTENCE_FAILED,
           userMessage: 'Failed to create template designer draft.',
           details: { error: String(err) },
           cause: err,
@@ -184,7 +180,7 @@ export class TemplateDesignerRepository {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.DATABASE_ERROR,
+          code: ErrorCode.PERSISTENCE_FAILED,
           userMessage: 'Failed to fetch template designer draft.',
           details: { draftId, error: String(err) },
           cause: err,
@@ -236,7 +232,7 @@ export class TemplateDesignerRepository {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.DATABASE_ERROR,
+          code: ErrorCode.PERSISTENCE_FAILED,
           userMessage: 'Failed to list template designer drafts.',
           details: { error: String(err) },
           cause: err,
@@ -356,7 +352,7 @@ export class TemplateDesignerRepository {
       if (!updated.ok || !updated.value) {
         return Err(
           new AppError({
-            code: ErrorCode.DATABASE_ERROR,
+            code: ErrorCode.PERSISTENCE_FAILED,
             userMessage: 'Failed to retrieve draft after update.',
             isOperational: true,
           })
@@ -367,7 +363,7 @@ export class TemplateDesignerRepository {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.DATABASE_ERROR,
+          code: ErrorCode.PERSISTENCE_FAILED,
           userMessage: 'Failed to update template designer draft.',
           details: { draftId, error: String(err) },
           cause: err,
@@ -387,7 +383,7 @@ export class TemplateDesignerRepository {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.DATABASE_ERROR,
+          code: ErrorCode.PERSISTENCE_FAILED,
           userMessage: 'Failed to delete template designer draft.',
           details: { draftId, error: String(err) },
           cause: err,

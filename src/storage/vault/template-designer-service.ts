@@ -31,6 +31,7 @@ import {
   toReportCategoryId,
   toTemplateVersionId,
 } from '../../shared/types/identifiers.ts';
+import type { TemplateId, TemplateVersionId } from '../../shared/types/identifiers.ts';
 import { Result, Ok, Err } from '../../shared/types/result.ts';
 import { AppError } from '../../shared/errors/app-error.ts';
 import { ErrorCode } from '../../shared/errors/error-codes.ts';
@@ -45,15 +46,11 @@ import { MappingProfileRepository } from '../database/repositories/mapping-profi
 import { ExcelMappingRepository } from '../database/repositories/excel-mapping-repository.ts';
 import { WordMappingRepository } from '../database/repositories/word-mapping-repository.ts';
 import { TemplateDesignerRepository } from '../database/repositories/template-designer-repository.ts';
-import {
-  isApprovedField,
-  getFieldDefinition,
-} from '../../shared/constants/report-fields.ts';
+import { isApprovedField, getFieldDefinition } from '../../shared/constants/report-fields.ts';
 import { CELL_ADDRESS_REGEX } from '../database/repositories/excel-mapping-repository.ts';
 import { WORD_PLACEHOLDER_REGEX } from '../database/repositories/word-mapping-repository.ts';
 
 export class TemplateDesignerService {
-  private readonly db: Database.Database;
   private readonly vaultManager: VaultManager;
   private readonly templateImporter: TemplateImporter;
   private readonly templateRepo: TemplateMetadataRepository;
@@ -74,7 +71,6 @@ export class TemplateDesignerService {
     wordMappingRepo?: WordMappingRepository,
     designerRepo?: TemplateDesignerRepository
   ) {
-    this.db = db;
     this.vaultManager = vaultManager ?? VaultManager.getInstance();
     this.templateRepo = templateRepo ?? new TemplateMetadataRepository(db);
     this.categoryRepo = categoryRepo ?? new CategoryRepository(db);
@@ -339,9 +335,7 @@ export class TemplateDesignerService {
   /**
    * Compiles an in-app design definition into an Open XML buffer.
    */
-  public compileToBuffer(
-    definition: TemplateDesignDefinition
-  ): Result<Buffer, AppError> {
+  public compileToBuffer(definition: TemplateDesignDefinition): Result<Buffer, AppError> {
     if (definition.format === 'EXCEL_WORKBOOK') {
       return ExcelTemplateBuilder.buildWorkbook(definition as ExcelWorkbookDesign);
     }
@@ -401,7 +395,7 @@ export class TemplateDesignerService {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.FILE_WRITE_ERROR,
+          code: ErrorCode.FILE_ACCESS_DENIED,
           userMessage: 'Failed to write compiled document to staging location.',
           details: { error: String(err) },
           cause: err,
@@ -421,13 +415,12 @@ export class TemplateDesignerService {
       let registeredVersionNumber: number;
 
       // Stage 5: Register through TemplateImporter
-      const docFormat =
-        input.documentType === 'EXCEL_WORKBOOK' ? 'EXCEL_XLSX' : 'WORD_DOCX';
+      const docFormat = input.documentType === 'EXCEL_WORKBOOK' ? 'EXCEL_XLSX' : 'WORD_DOCX';
 
       const importRes = await this.templateImporter.importTemplate({
         sourceFilePath: stagingFilePath,
         templateName: input.name,
-        categoryId: input.categoryId,
+        categoryId: toReportCategoryId(input.categoryId),
         documentType: docFormat,
         description: input.description,
         templateId: input.targetTemplateId ? toTemplateId(input.targetTemplateId) : undefined,
@@ -446,15 +439,13 @@ export class TemplateDesignerService {
       const shouldCreateMapping = input.createMappingProfile !== false;
 
       if (shouldCreateMapping) {
-        const profileName =
-          input.profileName?.trim() || `${input.name} Default Mappings`;
-        const profileDocType =
-          input.documentType === 'EXCEL_WORKBOOK' ? 'EXCEL_XLSX' : 'WORD_DOCX';
+        const profileName = input.profileName?.trim() || `${input.name} Default Mappings`;
+        const profileDocType = input.documentType === 'EXCEL_WORKBOOK' ? 'EXCEL_XLSX' : 'WORD_DOCX';
 
         const profileRes = this.mappingProfileRepo.createProfile({
           profileName,
           description: `Auto-generated from template design for "${input.name}"`,
-          categoryId: input.categoryId,
+          categoryId: toReportCategoryId(input.categoryId),
           templateId: registeredTemplateId,
           versionId: registeredVersionId,
           documentType: profileDocType,
@@ -474,9 +465,8 @@ export class TemplateDesignerService {
                   return {
                     worksheetName: sheet.name,
                     headerRowNumber: sheet.headerRowIndex,
-                    mappingType: (isRepeating
-                      ? 'TABLE_COLUMN'
-                      : 'FIXED_CELL') as 'FIXED_CELL' | 'TABLE_COLUMN',
+                    mappingType: (isRepeating ? 'TABLE_COLUMN' : 'FIXED_CELL') as
+                      'FIXED_CELL' | 'TABLE_COLUMN',
                     fieldId: c.fieldSlot!.fieldId,
                     fieldLabel: c.fieldSlot!.fieldLabel,
                     targetCoordinate: isRepeating
@@ -494,7 +484,6 @@ export class TemplateDesignerService {
                   worksheetName: sheet.name,
                   headerRowNumber: sheet.headerRowIndex,
                   mappings: mappingsToSave,
-                  profileId: createdProfileId,
                 });
               }
             }
@@ -542,7 +531,6 @@ export class TemplateDesignerService {
                 templateId: registeredTemplateId,
                 versionId: registeredVersionId,
                 mappings: wordMappingsToSave,
-                profileId: createdProfileId,
               });
             }
           }

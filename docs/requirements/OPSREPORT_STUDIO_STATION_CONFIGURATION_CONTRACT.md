@@ -5,13 +5,13 @@
 **Approved Product Name:** OpsReport Studio  
 **Lifecycle Step:** Step 3 of 45 (Station Sequence, Ordering & Configuration Specification)  
 **Status:** Authoritative Conceptual Contract  
-**Last Updated:** 2026-10-19  
+**Last Updated:** 2026-10-19
 
 ---
 
 ## 1. Contract Overview & Architectural Purpose
 
-This document specifies the conceptual data contract for the Station and Station Sequence domain in OpsReport Studio. 
+This document specifies the conceptual data contract for the Station and Station Sequence domain in OpsReport Studio.
 
 > [!IMPORTANT]
 > **Architectural Boundary Notice:** This document establishes a **conceptual and logical data contract**. It defines data entities, invariants, relationships, and validation boundaries. It is **NOT** a physical SQL schema, ORM entity declaration, database migration, or REST API specification. Physical database structures will be designed in later architectural phases.
@@ -22,15 +22,15 @@ This document specifies the conceptual data contract for the Station and Station
 
 The following properties define an individual station node within the operational inventory:
 
-| Property Name | Logical Data Type | Requiredness | Property Classification | Architectural Purpose & Invariants |
-| :--- | :--- | :--- | :--- | :--- |
-| **`station_id`** | `String` / `UUID` | **Mandatory** | `[ANALYST-PROPOSED]` | Immutable internal system identifier. Decouples the physical station identity from UI renames, preventing broken report references. |
-| **`station_name`** | `String` (1..150 chars) | **Mandatory** | `[USER-CONFIRMED]` | Official human-readable station name as provided by user/operations. Must be non-empty and case-insensitively unique within the active sequence. |
-| **`sequence_order`** | `Integer` (1..N) | **Mandatory** | `[USER-CONFIRMED]` | Explicit 1-based ordinal position of the station within the authoritative operational route. Strictly contiguous and unique. |
-| **`station_code`** | `String` (2..10 chars) | **Optional** | `[RESEARCH-SUGGESTED]` | Operational shortcode or telegraphic code (e.g., `ST-01`, `GCT`), if used by the facility. Nullable if the customer does not use codes. |
-| **`is_active`** | `Boolean` | **Mandatory** | `[ANALYST-PROPOSED]` | Lifecycle flag indicating whether the station is currently in active operational service (`true`) or decommissioned/temporarily closed (`false`). |
-| **`route_tag`** | `String` | **Optional** | `[ANALYST-PROPOSED]` | Extensibility marker designating zone, sector, or line membership (e.g., `MainLine`, `SectorA`). Defaults to `DefaultRoute`. |
-| **`remarks`** | `String` | **Optional** | `[ANALYST-PROPOSED]` | Administrative notes regarding station operational access, platform lengths, or facility contacts. |
+| Property Name        | Logical Data Type       | Requiredness  | Property Classification | Architectural Purpose & Invariants                                                                                                                |
+| :------------------- | :---------------------- | :------------ | :---------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`station_id`**     | `String` / `UUID`       | **Mandatory** | `[ANALYST-PROPOSED]`    | Immutable internal system identifier. Decouples the physical station identity from UI renames, preventing broken report references.               |
+| **`station_name`**   | `String` (1..150 chars) | **Mandatory** | `[USER-CONFIRMED]`      | Official human-readable station name as provided by user/operations. Must be non-empty and case-insensitively unique within the active sequence.  |
+| **`sequence_order`** | `Integer` (1..N)        | **Mandatory** | `[USER-CONFIRMED]`      | Explicit 1-based ordinal position of the station within the authoritative operational route. Strictly contiguous and unique.                      |
+| **`station_code`**   | `String` (2..10 chars)  | **Optional**  | `[RESEARCH-SUGGESTED]`  | Operational shortcode or telegraphic code (e.g., `ST-01`, `GCT`), if used by the facility. Nullable if the customer does not use codes.           |
+| **`is_active`**      | `Boolean`               | **Mandatory** | `[ANALYST-PROPOSED]`    | Lifecycle flag indicating whether the station is currently in active operational service (`true`) or decommissioned/temporarily closed (`false`). |
+| **`route_tag`**      | `String`                | **Optional**  | `[ANALYST-PROPOSED]`    | Extensibility marker designating zone, sector, or line membership (e.g., `MainLine`, `SectorA`). Defaults to `DefaultRoute`.                      |
+| **`remarks`**        | `String`                | **Optional**  | `[ANALYST-PROPOSED]`    | Administrative notes regarding station operational access, platform lengths, or facility contacts.                                                |
 
 ---
 
@@ -38,15 +38,15 @@ The following properties define an individual station node within the operationa
 
 A station sequence represents the complete, validated operational path:
 
-| Property Name | Logical Data Type | Requiredness | Property Classification | Architectural Purpose & Invariants |
-| :--- | :--- | :--- | :--- | :--- |
-| **`sequence_id`** | `String` / `UUID` | **Mandatory** | `[ANALYST-PROPOSED]` | Unique identifier for the sequence definition. |
-| **`sequence_version`** | `Integer` | **Mandatory** | `[ANALYST-PROPOSED]` | Incrementing revision integer (e.g., `1, 2, 3...`) tracking configuration update events. |
-| **`sequence_name`** | `String` | **Mandatory** | `[ANALYST-PROPOSED]` | Descriptive label (e.g., `Primary Operational Line Sequence`). |
-| **`stations`** | `Array<StationEntity>` | **Mandatory** | `[USER-CONFIRMED]` | Ordered collection of station entities. The array index must strictly mirror the `sequence_order` of each child element. |
-| **`station_count`** | `Integer` | **Mandatory** | `[ANALYST-PROPOSED]` | Derived total active station count (`count == stations.length >= 1`). |
-| **`effective_date`** | `DateTime` (ISO 8601) | **Mandatory** | `[ANALYST-PROPOSED]` | Timestamp when this sequence configuration was activated. |
-| **`checksum`** | `String` (SHA-256) | **Mandatory** | `[ANALYST-PROPOSED]` | Cryptographic hash computed over canonical station names and order. Used for quick integrity verification. |
+| Property Name          | Logical Data Type      | Requiredness  | Property Classification | Architectural Purpose & Invariants                                                                                       |
+| :--------------------- | :--------------------- | :------------ | :---------------------- | :----------------------------------------------------------------------------------------------------------------------- |
+| **`sequence_id`**      | `String` / `UUID`      | **Mandatory** | `[ANALYST-PROPOSED]`    | Unique identifier for the sequence definition.                                                                           |
+| **`sequence_version`** | `Integer`              | **Mandatory** | `[ANALYST-PROPOSED]`    | Incrementing revision integer (e.g., `1, 2, 3...`) tracking configuration update events.                                 |
+| **`sequence_name`**    | `String`               | **Mandatory** | `[ANALYST-PROPOSED]`    | Descriptive label (e.g., `Primary Operational Line Sequence`).                                                           |
+| **`stations`**         | `Array<StationEntity>` | **Mandatory** | `[USER-CONFIRMED]`      | Ordered collection of station entities. The array index must strictly mirror the `sequence_order` of each child element. |
+| **`station_count`**    | `Integer`              | **Mandatory** | `[ANALYST-PROPOSED]`    | Derived total active station count (`count == stations.length >= 1`).                                                    |
+| **`effective_date`**   | `DateTime` (ISO 8601)  | **Mandatory** | `[ANALYST-PROPOSED]`    | Timestamp when this sequence configuration was activated.                                                                |
+| **`checksum`**         | `String` (SHA-256)     | **Mandatory** | `[ANALYST-PROPOSED]`    | Cryptographic hash computed over canonical station names and order. Used for quick integrity verification.               |
 
 ---
 
@@ -89,12 +89,12 @@ The following structure illustrates how the station sequence contract may be ser
 }
 ```
 
-*Note: The item above is strictly illustrative of structural properties. No real station names or codes have been invented.*
+_Note: The item above is strictly illustrative of structural properties. No real station names or codes have been invented._
 
 ---
 
 ## 6. Contract Classification Summary
 
-* **CONFIRMED PROPERTIES:** `station_name`, `sequence_order`, ordered collection preservation, and non-empty station sequence.
-* **ANALYST-PROPOSED PROPERTIES:** `station_id` (stable UUID), `sequence_version`, `checksum`, `is_active`, `route_tag`.
-* **RESEARCH-SUGGESTED PROPERTIES:** `station_code`.
+- **CONFIRMED PROPERTIES:** `station_name`, `sequence_order`, ordered collection preservation, and non-empty station sequence.
+- **ANALYST-PROPOSED PROPERTIES:** `station_id` (stable UUID), `sequence_version`, `checksum`, `is_active`, `route_tag`.
+- **RESEARCH-SUGGESTED PROPERTIES:** `station_code`.

@@ -1,10 +1,11 @@
 # OpsReport Studio — Step 21 Completion Report
+
 # Template Library Management, Replacement & Recovery Workflows
 
 **Date:** 2026-10-21  
 **Version:** 0.1.0-alpha  
 **Author:** OpsReport Studio Architecture & Engineering Team  
-**Status:** COMPLETE & VERIFIED  
+**Status:** COMPLETE & VERIFIED
 
 ---
 
@@ -13,6 +14,7 @@
 Roadmap Step 21 establishes comprehensive, safe, and user-directed template library management workflows for OpsReport Studio. Building upon the foundational services delivered in Steps 15 (Category & Metadata Registry), 16 (Report Session Persistence), 17 (Master Template Vault), 18 (Import Pipeline & Validation), 19 (Immutable Master Templates & Versioning), and 20 (Metadata Inspection & Lightweight Preview), Step 21 completes the operational lifecycle of templates without compromising data integrity.
 
 ### Core Deliverables
+
 1. **Unified Template Library Management:** Multi-criteria search, filtering (by category, document format, lifecycle status, and physical asset health), deterministic sorting, and real-time cryptographic health status badges.
 2. **Safe Metadata Management:** Permitted fields (`template_name`, `description`, `status`) editable while strictly safeguarding protected system metadata (`template_id`, `created_at`, cryptographic hashes, version numbers); category changes enforced for format compatibility; zero disk byte mutation during metadata updates.
 3. **Controlled Template Replacement:** Stepwise replacement workflow enforcing format compatibility, validating Open XML containers via the Step 18 pipeline, staging securely in scratch storage, allocating sequential version N+1 in the Step 19 two-tier versioning model, and atomically promoting the new version only after persistent verification, ensuring 100% preservation of all historical master files.
@@ -24,6 +26,7 @@ Roadmap Step 21 establishes comprehensive, safe, and user-directed template libr
 ## 2. Pre-Implementation Audit & Baseline Verification
 
 ### 2.1 Git Status & Architecture Baseline
+
 - **Git Branch:** `main`
 - **Initial Test Suite:** 28 test suites, 208 unit/smoke tests, all passing.
 - **TypeScript Compilation:** Strict dual compilation (`tsconfig.node.json` & `tsconfig.web.json`) passing with 0 errors.
@@ -35,6 +38,7 @@ Roadmap Step 21 establishes comprehensive, safe, and user-directed template libr
 ## 3. Implementation Details
 
 ### 3.1 Backend & Storage Layer
+
 1. **`src/shared/types/templates.ts` & `src/shared/types/metadata.ts`:**
    - Defined `TemplateHealthStatus`: `'OK' | 'MISSING_FILE' | 'INTEGRITY_MISMATCH' | 'NO_ACTIVE_VERSION'`.
    - Defined `HistoricalVersionSummary` and `TemplateHealthRecord` capturing expected vs actual hashes, read-only status, available historical versions count, and intact historical candidates.
@@ -67,6 +71,7 @@ Roadmap Step 21 establishes comprehensive, safe, and user-directed template libr
    - Exposed on `window.opsreport.templates` with sandboxed context-isolation.
 
 ### 3.2 Renderer & User Interface Layer
+
 1. **`src/renderer/services/template-client.ts`:**
    - Extended `ITemplateClient`, `ElectronTemplateClient`, and `InMemoryTemplateClient` with `replaceTemplate`, `checkHealth`, `checkAllHealth`, and `getDependencyCount`.
 2. **`src/renderer/components/templates/ReplaceTemplateModal.tsx`:**
@@ -89,6 +94,7 @@ Roadmap Step 21 establishes comprehensive, safe, and user-directed template libr
 ## 4. Verification & Testing
 
 ### 4.1 Automated Test Execution Summary
+
 - **Test Command:** `npm test`
 - **Total Test Files:** 29 passed (29 total)
 - **Total Tests:** 220 passed (220 total)
@@ -96,22 +102,24 @@ Roadmap Step 21 establishes comprehensive, safe, and user-directed template libr
 - **Dedicated Step 21 Suite:** `tests/unit/template-library-management.test.ts` (12 tests)
 
 ### 4.2 Test Matrix
-| Test ID | Category | Objective | Result |
-| :--- | :--- | :--- | :--- |
-| `LIB-01` | Query & Presentation | Retrieves templates with active version ID and version count | PASSED |
-| `LIB-02` | Filtering & Search | Filters templates by category, status, and document format | PASSED |
-| `META-01` | Safe Metadata Editing | Modifies permitted fields (name, desc) without altering master bytes | PASSED |
-| `META-02` | Category Reassignment | Permits format-compatible category change; rejects incompatible format | PASSED |
-| `REPL-01` | Controlled Replacement | Creates version N+1, promotes active version, preserves historical master bytes | PASSED |
-| `REPL-02` | Format Compatibility Guard | Rejects replacing Excel template with Word document | PASSED |
-| `LIFE-01` | Reversible Retirement | Toggles ACTIVE <-> ARCHIVED, preserving version history and vault assets | PASSED |
-| `LIFE-02` | Dependency Protection | Blocks permanent deletion when template is referenced by report sessions | PASSED |
-| `LIFE-03` | Safe Unreferenced Deletion | Deletes metadata and unlinks read-only vault files when references = 0 | PASSED |
-| `HLTH-01` | Asset Health Diagnostics | Accurately detects `OK`, `MISSING_FILE`, and `INTEGRITY_MISMATCH` | PASSED |
-| `RECOV-01` | Historical Version Rollback | Restores verified historical version when active file is missing | PASSED |
-| `RECOV-02` | Re-Import Replacement | Re-imports clean replacement file creating version N+1 to heal corruption | PASSED |
+
+| Test ID    | Category                    | Objective                                                                       | Result |
+| :--------- | :-------------------------- | :------------------------------------------------------------------------------ | :----- |
+| `LIB-01`   | Query & Presentation        | Retrieves templates with active version ID and version count                    | PASSED |
+| `LIB-02`   | Filtering & Search          | Filters templates by category, status, and document format                      | PASSED |
+| `META-01`  | Safe Metadata Editing       | Modifies permitted fields (name, desc) without altering master bytes            | PASSED |
+| `META-02`  | Category Reassignment       | Permits format-compatible category change; rejects incompatible format          | PASSED |
+| `REPL-01`  | Controlled Replacement      | Creates version N+1, promotes active version, preserves historical master bytes | PASSED |
+| `REPL-02`  | Format Compatibility Guard  | Rejects replacing Excel template with Word document                             | PASSED |
+| `LIFE-01`  | Reversible Retirement       | Toggles ACTIVE <-> ARCHIVED, preserving version history and vault assets        | PASSED |
+| `LIFE-02`  | Dependency Protection       | Blocks permanent deletion when template is referenced by report sessions        | PASSED |
+| `LIFE-03`  | Safe Unreferenced Deletion  | Deletes metadata and unlinks read-only vault files when references = 0          | PASSED |
+| `HLTH-01`  | Asset Health Diagnostics    | Accurately detects `OK`, `MISSING_FILE`, and `INTEGRITY_MISMATCH`               | PASSED |
+| `RECOV-01` | Historical Version Rollback | Restores verified historical version when active file is missing                | PASSED |
+| `RECOV-02` | Re-Import Replacement       | Re-imports clean replacement file creating version N+1 to heal corruption       | PASSED |
 
 ### 4.3 Static Analysis & Production Build
+
 - **TypeScript Check:** `npm run typecheck` (tsc node & web) passed with 0 errors.
 - **ESLint:** `npm run lint` passed with 0 errors and 0 warnings.
 - **Prettier:** `npm run format:check` verified 100% compliant.
@@ -127,6 +135,7 @@ Roadmap Step 21 establishes comprehensive, safe, and user-directed template libr
 ## 5. Strict Roadmap Boundary Compliance
 
 In accordance with Section 20 of the Step 21 Prompt:
+
 - **No Mapping Wizards Implemented:** Step 22 (Excel Cell Mapping) and Step 23 (Word Placeholder Mapping) were NOT implemented prematurely.
 - **No Mapping Profiles Implemented:** Step 24 (Mapping Profiles & Compatibility Rules) was NOT implemented.
 - **No In-App Template Designer Implemented:** Step 25 was NOT implemented.
@@ -138,28 +147,28 @@ In accordance with Section 20 of the Step 21 Prompt:
 
 ## 6. Acceptance Sign-Off Checklist
 
-| Acceptance Criterion | Verification Status |
-| :--- | :--- |
-| 1. Authoritative template library browsing & detail navigation | **PASSED** |
-| 2. Search, multi-criteria filtering, and deterministic sorting | **PASSED** |
-| 3. Distinct representation of logical templates vs physical versions | **PASSED** |
-| 4. Permitted metadata editing with immutable system fields | **PASSED** |
-| 5. Zero master document byte modification during metadata edits | **PASSED** |
-| 6. Controlled template replacement reusing Step 18 import pipeline | **PASSED** |
-| 7. Distinct sequential version N+1 creation during replacement | **PASSED** |
-| 8. 100% preservation of accepted historical master files | **PASSED** |
-| 9. Current-version promotion only after successful disk/hash verification | **PASSED** |
-| 10. Reversible lifecycle management (ACTIVE <-> ARCHIVED) | **PASSED** |
-| 11. Historical report session dependency protection blocking permanent deletion | **PASSED** |
-| 12. Real-time cryptographic vault asset health detection (`OK`, `MISSING_FILE`, `INTEGRITY_MISMATCH`) | **PASSED** |
-| 13. Truthful user-directed recovery (historical rollback, clean re-import, re-verify) | **PASSED** |
-| 14. Atomic rollback preventing false success on storage/database failure | **PASSED** |
-| 15. Narrowly-scoped cleanup affecting only operation-owned resources | **PASSED** |
-| 16. Comprehensive automated test coverage across all workflows | **PASSED** |
-| 17. Zero regressions across Steps 13 through 20 | **PASSED** |
-| 18. Clean TypeScript compilation, linting, formatting, and production build | **PASSED** |
-| 19. Strict roadmap boundary preservation (No Step 22+ features implemented) | **PASSED** |
-| 20. Master immutability invariant maintained | **PASSED** |
-| 21. Clean code maintainability and adherence to project architecture | **PASSED** |
+| Acceptance Criterion                                                                                  | Verification Status |
+| :---------------------------------------------------------------------------------------------------- | :------------------ |
+| 1. Authoritative template library browsing & detail navigation                                        | **PASSED**          |
+| 2. Search, multi-criteria filtering, and deterministic sorting                                        | **PASSED**          |
+| 3. Distinct representation of logical templates vs physical versions                                  | **PASSED**          |
+| 4. Permitted metadata editing with immutable system fields                                            | **PASSED**          |
+| 5. Zero master document byte modification during metadata edits                                       | **PASSED**          |
+| 6. Controlled template replacement reusing Step 18 import pipeline                                    | **PASSED**          |
+| 7. Distinct sequential version N+1 creation during replacement                                        | **PASSED**          |
+| 8. 100% preservation of accepted historical master files                                              | **PASSED**          |
+| 9. Current-version promotion only after successful disk/hash verification                             | **PASSED**          |
+| 10. Reversible lifecycle management (ACTIVE <-> ARCHIVED)                                             | **PASSED**          |
+| 11. Historical report session dependency protection blocking permanent deletion                       | **PASSED**          |
+| 12. Real-time cryptographic vault asset health detection (`OK`, `MISSING_FILE`, `INTEGRITY_MISMATCH`) | **PASSED**          |
+| 13. Truthful user-directed recovery (historical rollback, clean re-import, re-verify)                 | **PASSED**          |
+| 14. Atomic rollback preventing false success on storage/database failure                              | **PASSED**          |
+| 15. Narrowly-scoped cleanup affecting only operation-owned resources                                  | **PASSED**          |
+| 16. Comprehensive automated test coverage across all workflows                                        | **PASSED**          |
+| 17. Zero regressions across Steps 13 through 20                                                       | **PASSED**          |
+| 18. Clean TypeScript compilation, linting, formatting, and production build                           | **PASSED**          |
+| 19. Strict roadmap boundary preservation (No Step 22+ features implemented)                           | **PASSED**          |
+| 20. Master immutability invariant maintained                                                          | **PASSED**          |
+| 21. Clean code maintainability and adherence to project architecture                                  | **PASSED**          |
 
 **Step 21 is formally signed off as complete.**

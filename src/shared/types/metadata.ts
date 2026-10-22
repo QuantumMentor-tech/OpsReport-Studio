@@ -272,7 +272,9 @@ export interface DesignerBridgeAPI {
   ) => Promise<Result<import('./template-designer.ts').DesignerDraftSummary[], SerializableError>>;
   readonly getDraft: (
     draftId: string
-  ) => Promise<Result<import('./template-designer.ts').DesignerDraftRecord | null, SerializableError>>;
+  ) => Promise<
+    Result<import('./template-designer.ts').DesignerDraftRecord | null, SerializableError>
+  >;
   readonly createDraft: (
     input: import('./template-designer.ts').CreateDesignerDraftInput
   ) => Promise<Result<import('./template-designer.ts').DesignerDraftRecord, SerializableError>>;
@@ -280,16 +282,38 @@ export interface DesignerBridgeAPI {
     draftId: string,
     input: import('./template-designer.ts').UpdateDesignerDraftInput
   ) => Promise<Result<import('./template-designer.ts').DesignerDraftRecord, SerializableError>>;
-  readonly deleteDraft: (
-    draftId: string
-  ) => Promise<Result<boolean, SerializableError>>;
+  readonly deleteDraft: (draftId: string) => Promise<Result<boolean, SerializableError>>;
   readonly validateDesign: (
     definition: import('./template-designer.ts').TemplateDesignDefinition,
     categoryId?: string
-  ) => Promise<Result<import('./template-designer.ts').DesignerValidationResult, SerializableError>>;
+  ) => Promise<
+    Result<import('./template-designer.ts').DesignerValidationResult, SerializableError>
+  >;
   readonly compileAndRegister: (
     input: import('./template-designer.ts').CompileAndRegisterInput
-  ) => Promise<Result<import('./template-designer.ts').CompileAndRegisterResult, SerializableError>>;
+  ) => Promise<
+    Result<import('./template-designer.ts').CompileAndRegisterResult, SerializableError>
+  >;
+}
+
+export interface GenerationBridgeAPI {
+  readonly prepareExcelWorkspace: (
+    options: import('./generation.ts').CreateExcelCloneOptions
+  ) => Promise<Result<import('./generation.ts').ExcelCloneResult, SerializableError>>;
+  readonly getWorkspace: (
+    workspaceId: string
+  ) => Promise<
+    Result<import('./generation.ts').GenerationWorkspaceRecord | null, SerializableError>
+  >;
+  readonly discardWorkspace: (workspaceId: string) => Promise<Result<boolean, SerializableError>>;
+  readonly getActiveWorkspaceForSession: (
+    sessionId: string
+  ) => Promise<
+    Result<import('./generation.ts').GenerationWorkspaceRecord | null, SerializableError>
+  >;
+  readonly injectExcelData: (
+    options: import('./generation.ts').InjectExcelDataOptions
+  ) => Promise<Result<import('./generation.ts').ExcelDataInjectionResult, SerializableError>>;
 }
 
 export interface OpsReportBridgeAPI {
@@ -301,4 +325,5 @@ export interface OpsReportBridgeAPI {
   readonly sessions?: SessionBridgeAPI;
   readonly vault?: VaultBridgeAPI;
   readonly designer?: DesignerBridgeAPI;
+  readonly generation?: GenerationBridgeAPI;
 }

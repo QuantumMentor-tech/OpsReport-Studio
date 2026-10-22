@@ -1,4 +1,5 @@
 # OpsReport Studio — Step 18 Implementation Report
+
 ## Excel and Word Template Import, Validation & File-Type Handling
 
 **Document Identifier:** DEV-STEP-18-REPORT  
@@ -6,7 +7,7 @@
 **Approved Product Name:** OpsReport Studio  
 **Lifecycle Step:** Step 18 of 45 (Excel and Word Template Import, Validation & File-Type Handling)  
 **Execution Date:** 2026-10-20  
-**Implementation Standard:** Senior Desktop Application Engineer, Senior Document-Processing Engineer, Senior Filesystem Security Engineer, Senior Database Engineer, Senior UI/UX Engineer, Senior QA Automation Engineer  
+**Implementation Standard:** Senior Desktop Application Engineer, Senior Document-Processing Engineer, Senior Filesystem Security Engineer, Senior Database Engineer, Senior UI/UX Engineer, Senior QA Automation Engineer
 
 ---
 
@@ -15,6 +16,7 @@
 Step 18 establishes the authoritative, secure, user-initiated Excel and Word template-import pipeline for OpsReport Studio.
 
 Key capabilities delivered:
+
 1. **8-Stage Transactional Import Pipeline:** Centralized in `TemplateImporter` (`src/storage/vault/template-importer.ts`):
    - Stage 1: Input validation (template title, category reference, format alignment).
    - Stage 2: Source inspection & security check (`assertTargetNotInsideVault`, `INV-DAT-006`).
@@ -45,6 +47,7 @@ Key capabilities delivered:
 ### B. Files Created or Modified
 
 #### Files Created:
+
 1. `src/storage/vault/document-validator.ts`: Pure-function container inspector validating magic bytes, size limits, ZIP structure, entry count, traversal paths, decompression ratio, macro absence, and required Open XML parts (`[Content_Types].xml`, `_rels/.rels`, `xl/workbook.xml`, `word/document.xml`).
 2. `src/storage/vault/template-importer.ts`: Core `TemplateImporter` class orchestrating source inspection, scratch staging, validation, vault promotion, metadata registration, rollback, and cleanup.
 3. `tests/unit/document-validator.test.ts`: 13 automated unit tests covering valid Excel/Word packages, empty files, random bytes, legacy OLE binary headers, corrupt archives, missing parts, format mismatches, macro quarantine, path traversal, size limits, and filesystem operations.
@@ -52,6 +55,7 @@ Key capabilities delivered:
 5. `docs/development/STEP_18_TEMPLATE_IMPORT_REPORT.md`: This comprehensive implementation and verification report.
 
 #### Files Modified:
+
 1. `package.json` & `package-lock.json`: Added `pizzip` (^3.1.7) and `@types/pizzip` (^3.0.4) to dependencies.
 2. `src/shared/types/templates.ts`: Added `TemplateFileSelection`, `TemplateValidationDetails`, `ImportTemplateOptions`, and `TemplateImportResult`.
 3. `src/shared/types/metadata.ts`: Added `selectFile` and `importTemplate` to `TemplateBridgeAPI`.
@@ -72,21 +76,22 @@ Key capabilities delivered:
 
 In strict alignment with `OPSREPORT_STUDIO_DOCUMENT_COMPATIBILITY_MATRIX.md` (Step 4) and `ADR-OPSREPORT-002` (Step 7):
 
-| Format Extension | Format Family | Status | Library Engine | Macro Policy | Handling Strategy |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **`.xlsx`** | Excel Open XML Workbook | **CONFIRMED CORE (V1)** | `PizZip` / `exceljs` | None (Macro-free) | Validated container, verified `xl/workbook.xml`, promoted to vault. |
-| **`.docx`** | Word Open XML Document | **CONFIRMED CORE (V1)** | `PizZip` / `docxtemplater` | None (Macro-free) | Validated container, verified `word/document.xml`, promoted to vault. |
-| **`.xlsm`** | Excel Macro-Enabled | **EXPLICITLY REJECTED** | N/A | **CRITICAL RISK** | Detected by `vbaProject.bin`; quarantined and rejected with clear security message. |
-| **`.docm`** | Word Macro-Enabled | **EXPLICITLY REJECTED** | N/A | **CRITICAL RISK** | Detected by `vbaProject.bin`; quarantined and rejected with clear security message. |
-| **`.xls`** | Legacy Excel 97–2003 Binary | **EXPLICITLY REJECTED** | N/A | High (Legacy binary) | Detected by OLE header (`\xD0\xCF\x11\xE0`); rejected with instruction to resave as `.xlsx`. |
-| **`.doc`** | Legacy Word 97–2003 Binary | **EXPLICITLY REJECTED** | N/A | High (Legacy binary) | Detected by OLE header (`\xD0\xCF\x11\xE0`); rejected with instruction to resave as `.docx`. |
-| **All Others** | `.ods`, `.pdf`, `.csv`, `.rtf`, etc. | **EXPLICITLY REJECTED** | N/A | Varies | Rejected by extension allowlist and ZIP container magic byte checks. |
+| Format Extension | Format Family                        | Status                  | Library Engine             | Macro Policy         | Handling Strategy                                                                            |
+| :--------------- | :----------------------------------- | :---------------------- | :------------------------- | :------------------- | :------------------------------------------------------------------------------------------- |
+| **`.xlsx`**      | Excel Open XML Workbook              | **CONFIRMED CORE (V1)** | `PizZip` / `exceljs`       | None (Macro-free)    | Validated container, verified `xl/workbook.xml`, promoted to vault.                          |
+| **`.docx`**      | Word Open XML Document               | **CONFIRMED CORE (V1)** | `PizZip` / `docxtemplater` | None (Macro-free)    | Validated container, verified `word/document.xml`, promoted to vault.                        |
+| **`.xlsm`**      | Excel Macro-Enabled                  | **EXPLICITLY REJECTED** | N/A                        | **CRITICAL RISK**    | Detected by `vbaProject.bin`; quarantined and rejected with clear security message.          |
+| **`.docm`**      | Word Macro-Enabled                   | **EXPLICITLY REJECTED** | N/A                        | **CRITICAL RISK**    | Detected by `vbaProject.bin`; quarantined and rejected with clear security message.          |
+| **`.xls`**       | Legacy Excel 97–2003 Binary          | **EXPLICITLY REJECTED** | N/A                        | High (Legacy binary) | Detected by OLE header (`\xD0\xCF\x11\xE0`); rejected with instruction to resave as `.xlsx`. |
+| **`.doc`**       | Legacy Word 97–2003 Binary           | **EXPLICITLY REJECTED** | N/A                        | High (Legacy binary) | Detected by OLE header (`\xD0\xCF\x11\xE0`); rejected with instruction to resave as `.docx`. |
+| **All Others**   | `.ods`, `.pdf`, `.csv`, `.rtf`, etc. | **EXPLICITLY REJECTED** | N/A                        | Varies               | Rejected by extension allowlist and ZIP container magic byte checks.                         |
 
 ---
 
 ### D. Validation Approach
 
 The `DocumentValidator` (`src/storage/vault/document-validator.ts`) enforces strict validation before a file can be promoted:
+
 1. **Magic Bytes Verification:** Inspects the first 4 bytes. Rejects files that do not start with `PK\x03\x04` (`0x50 0x4B 0x03 0x04`). Specifically identifies OLE CFB headers (`0xD0 0xCF 0x11 0xE0`) to give tailored feedback for legacy or password-encrypted files.
 2. **Resource Ceilings & Zip Bomb Protection:**
    - Compressed size capped at 25 MB (`MAX_TEMPLATE_FILE_SIZE`).
@@ -169,13 +174,13 @@ The `DocumentValidator` (`src/storage/vault/document-validator.ts`) enforces str
 
 ### H. Tests and Build Commands
 
-| Verification Check | Tool / Command | Result |
-| :--- | :--- | :--- |
-| **Unit & Integration Tests** | `npm test` (Vitest v2.1.9) | **186/186 passed** across 26 test files (0 failures, 100% green) |
-| **TypeScript Type Checking** | `npm run typecheck` (`tsc -p tsconfig.node.json && tsc -p tsconfig.web.json`) | **Passed** with 0 errors across Node and Web targets |
-| **Code Linting** | `npm run lint` (`eslint .`) | **Passed** with 0 errors, 0 warnings |
-| **Formatting Conformance** | `npm run format:check` (`prettier --check`) | **Passed** (100% compliant) |
-| **Production Build** | `npm run build` (Vite + Electron Main & Preload) | **Passed** (Web bundle 264 kB, Main 375 kB, Preload 2.52 kB) |
+| Verification Check           | Tool / Command                                                                | Result                                                           |
+| :--------------------------- | :---------------------------------------------------------------------------- | :--------------------------------------------------------------- |
+| **Unit & Integration Tests** | `npm test` (Vitest v2.1.9)                                                    | **186/186 passed** across 26 test files (0 failures, 100% green) |
+| **TypeScript Type Checking** | `npm run typecheck` (`tsc -p tsconfig.node.json && tsc -p tsconfig.web.json`) | **Passed** with 0 errors across Node and Web targets             |
+| **Code Linting**             | `npm run lint` (`eslint .`)                                                   | **Passed** with 0 errors, 0 warnings                             |
+| **Formatting Conformance**   | `npm run format:check` (`prettier --check`)                                   | **Passed** (100% compliant)                                      |
+| **Production Build**         | `npm run build` (Vite + Electron Main & Preload)                              | **Passed** (Web bundle 264 kB, Main 375 kB, Preload 2.52 kB)     |
 
 ---
 
@@ -210,35 +215,36 @@ The `DocumentValidator` (`src/storage/vault/document-validator.ts`) enforces str
 
 ### L. Acceptance Checklist
 
-| # | Acceptance Criterion | Status | Verification Evidence |
-| :---: | :--- | :---: | :--- |
-| 1 | User can explicitly select a file through approved desktop file picker | **Passed** | Native `dialog.showOpenDialog` wired via `template:select-file` |
-| 2 | Supported format policy is documented based on requirements and libraries | **Passed** | Section C documents `.xlsx` and `.docx` core support; `.xlsm`/`.docm`/`.xls`/`.doc` rejected |
-| 3 | Extension checks are combined with actual-content and container structure validation | **Passed** | `validateDocumentBuffer` verifies magic bytes, ZIP structure, core parts |
-| 4 | Invalid, corrupted, unsupported, or oversized files are rejected according to documented rules | **Passed** | Verified in `VAL-03` through `VAL-12` |
-| 5 | Document validation uses approved libraries and bounded processing | **Passed** | `PizZip` bounded by 25MB file size, 100MB expansion, 15:1 ratio, 1000 entries |
-| 6 | File import uses managed staging and storage abstractions from actual application | **Passed** | Staging via `vaultManager.resolveScratchPath`; promotion via `resolveTemplateVaultPath` |
-| 7 | Original source file remains unmodified and in original location | **Passed** | Verified by SHA-256 and size comparison in `IMP-01` |
-| 8 | Accepted template is promoted into managed vault using stable internal identity | **Passed** | Promoted as `{templateId}.{xlsx|docx}`; verified in `IMP-01`, `IMP-02` |
-| 9 | Metadata is registered through existing authoritative registry | **Passed** | `TemplateMetadataRepository.createTemplate` / `updateTemplate` registered |
-| 10 | Required category and format relationships are validated | **Passed** | Checked against `category.default_format`; verified in `IMP-05` |
-| 11 | Database and filesystem failure cases cannot silently produce false success | **Passed** | Atomic rollback unlinks promoted file if SQLite insertion throws |
-| 12 | Partial files and staging artifacts are safely handled after rejection or failure | **Passed** | Guaranteed `stagedPath` unlinking in `finally`; verified in `IMP-04`, `IMP-07` |
-| 13 | Duplicate import and collision behavior follows explicit policy | **Passed** | Descriptor update supported (`IMP-03`); stable ID validation enforced |
-| 14 | Interface communicates actual operation state and useful errors | **Passed** | `ImportTemplateModal` shows file details, format badge, and error alerts |
-| 15 | Resource limits and path/archive attacks covered by safeguards and tests | **Passed** | Verified in `VAL-11` (traversal) and `VAL-12` (size ceiling) |
-| 16 | Supported-format testing uses representative fixtures | **Passed** | Programmatic Open XML fixtures test valid Excel, Word, and corrupt variants |
-| 17 | Existing Steps 13 through 17 remain intact | **Passed** | All 186 tests pass (100% green across all subsystems) |
-| 18 | Relevant tests, type checks, linting, and builds have run | **Passed** | 186/186 tests pass; typecheck, lint, format:check, and build 100% green |
-| 19 | No template cloning/versioning, mapping wizard, or generation engine implemented prematurely | **Passed** | Strict stop boundary enforced; later step features excluded |
-| 20 | No source document or unrelated managed template has been overwritten, moved, or deleted | **Passed** | Source preservation proven (`IMP-01`); vault isolation proven (`IMP-06`) |
-| 21 | Code remains maintainable, appropriately scoped, and regression-free | **Passed** | Clean modular architecture, TypeScript strictness, zero lint warnings |
+|  #  | Acceptance Criterion                                                                           |   Status   | Verification Evidence                                                                        |
+| :-: | :--------------------------------------------------------------------------------------------- | :--------: | :------------------------------------------------------------------------------------------- |
+|  1  | User can explicitly select a file through approved desktop file picker                         | **Passed** | Native `dialog.showOpenDialog` wired via `template:select-file`                              |
+|  2  | Supported format policy is documented based on requirements and libraries                      | **Passed** | Section C documents `.xlsx` and `.docx` core support; `.xlsm`/`.docm`/`.xls`/`.doc` rejected |
+|  3  | Extension checks are combined with actual-content and container structure validation           | **Passed** | `validateDocumentBuffer` verifies magic bytes, ZIP structure, core parts                     |
+|  4  | Invalid, corrupted, unsupported, or oversized files are rejected according to documented rules | **Passed** | Verified in `VAL-03` through `VAL-12`                                                        |
+|  5  | Document validation uses approved libraries and bounded processing                             | **Passed** | `PizZip` bounded by 25MB file size, 100MB expansion, 15:1 ratio, 1000 entries                |
+|  6  | File import uses managed staging and storage abstractions from actual application              | **Passed** | Staging via `vaultManager.resolveScratchPath`; promotion via `resolveTemplateVaultPath`      |
+|  7  | Original source file remains unmodified and in original location                               | **Passed** | Verified by SHA-256 and size comparison in `IMP-01`                                          |
+|  8  | Accepted template is promoted into managed vault using stable internal identity                | **Passed** | Promoted as `{templateId}.{xlsx                                                              | docx}`; verified in `IMP-01`, `IMP-02` |
+|  9  | Metadata is registered through existing authoritative registry                                 | **Passed** | `TemplateMetadataRepository.createTemplate` / `updateTemplate` registered                    |
+| 10  | Required category and format relationships are validated                                       | **Passed** | Checked against `category.default_format`; verified in `IMP-05`                              |
+| 11  | Database and filesystem failure cases cannot silently produce false success                    | **Passed** | Atomic rollback unlinks promoted file if SQLite insertion throws                             |
+| 12  | Partial files and staging artifacts are safely handled after rejection or failure              | **Passed** | Guaranteed `stagedPath` unlinking in `finally`; verified in `IMP-04`, `IMP-07`               |
+| 13  | Duplicate import and collision behavior follows explicit policy                                | **Passed** | Descriptor update supported (`IMP-03`); stable ID validation enforced                        |
+| 14  | Interface communicates actual operation state and useful errors                                | **Passed** | `ImportTemplateModal` shows file details, format badge, and error alerts                     |
+| 15  | Resource limits and path/archive attacks covered by safeguards and tests                       | **Passed** | Verified in `VAL-11` (traversal) and `VAL-12` (size ceiling)                                 |
+| 16  | Supported-format testing uses representative fixtures                                          | **Passed** | Programmatic Open XML fixtures test valid Excel, Word, and corrupt variants                  |
+| 17  | Existing Steps 13 through 17 remain intact                                                     | **Passed** | All 186 tests pass (100% green across all subsystems)                                        |
+| 18  | Relevant tests, type checks, linting, and builds have run                                      | **Passed** | 186/186 tests pass; typecheck, lint, format:check, and build 100% green                      |
+| 19  | No template cloning/versioning, mapping wizard, or generation engine implemented prematurely   | **Passed** | Strict stop boundary enforced; later step features excluded                                  |
+| 20  | No source document or unrelated managed template has been overwritten, moved, or deleted       | **Passed** | Source preservation proven (`IMP-01`); vault isolation proven (`IMP-06`)                     |
+| 21  | Code remains maintainable, appropriately scoped, and regression-free                           | **Passed** | Clean modular architecture, TypeScript strictness, zero lint warnings                        |
 
 ---
 
 ### Strict Stop Boundary Enforcement
 
 All objectives for **Step 18** are fully completed, tested, documented, and verified. In accordance with the strict stop boundary:
+
 - Implementation is halted.
 - Step 19 (Master-Template Immutability, Versioning & Cloned Work Copies) has not been started.
 - Awaiting explicit authorization before proceeding to the next step.

@@ -1,10 +1,11 @@
 # OpsReport Studio — Step 22 Completion Report
+
 # Excel Worksheet, Header Row & Cell Mapping Wizard
 
 **Date:** 2026-10-21  
 **Version:** 0.1.0-alpha  
 **Author:** OpsReport Studio Architecture & Engineering Team  
-**Status:** COMPLETE & VERIFIED  
+**Status:** COMPLETE & VERIFIED
 
 ---
 
@@ -15,6 +16,7 @@ Roadmap Step 22 delivers a practical, maintainable, and user-guided configuratio
 All configuration mappings are validated and persisted in SQLite independently of the master workbook files, ensuring that master templates in the vault remain 100% byte-for-byte immutable with identical cryptographic SHA-256 fingerprints before and after the mapping workflow.
 
 ### Core Deliverables
+
 1. **Authoritative Field Catalog (`DIC-OPSREPORT-001`):** Complete field dictionary in `src/shared/constants/report-fields.ts` containing common core operational fields (`FLD-COM-*`) and category-specific fields for all 6 Excel categories (`RPT-STATION-LIGHT`, `RPT-FAN`, `RPT-POLE-LIGHT`, `RPT-FIRE-EXTINGUISHER`, `RPT-PILLAR`, `RPT-FENCE`).
 2. **Database Migration 005 (`excel_template_mappings`):** Schema migration establishing relational storage for template mappings, keyed by `(template_id, version_id, worksheet_name)`, with foreign keys and unique constraints preventing duplicate field assignments and target coordinate collisions.
 3. **Excel Mapping Repository:** Transactional SQLite persistence layer supporting atomic sheet-level replacement, version isolation, coordinate syntax validation, and duplicate conflict detection.
@@ -32,13 +34,16 @@ All configuration mappings are validated and persisted in SQLite independently o
 ## 2. Pre-Implementation Audit & Baseline Verification
 
 ### 2.1 Git Status & Architecture Baseline
+
 - **Git Branch:** `main`
 - **Baseline Test Suite:** 29 test suites, 221 unit/smoke tests, all passing.
 - **TypeScript Compilation:** Strict dual compilation (`tsconfig.node.json` & `tsconfig.web.json`) passing with 0 errors.
 - **Database Schema Version:** Migration 004 active (`user_version = 4`).
 
 ### 2.2 Schema Evolution (Migration 005)
+
 Step 22 introduced Migration 005 to upgrade `user_version` to 5 and create the `excel_template_mappings` table:
+
 ```sql
 CREATE TABLE IF NOT EXISTS excel_template_mappings (
   mapping_id TEXT PRIMARY KEY,
@@ -66,6 +71,7 @@ CREATE TABLE IF NOT EXISTS excel_template_mappings (
 ## 3. Implementation Details
 
 ### 3.1 Domain Contracts & Types
+
 - **`src/shared/types/excel-mapping.ts`:**
   - `ExcelMappingType`: `'FIXED_CELL' | 'TABLE_COLUMN'`.
   - `ExcelFieldMappingRecord`: Full entity representation from database.
@@ -75,6 +81,7 @@ CREATE TABLE IF NOT EXISTS excel_template_mappings (
   - `MappingValidationError`: Field, coordinate, code, and user message.
 
 ### 3.2 Authoritative Field Catalog (`DIC-OPSREPORT-001`)
+
 - **`src/shared/constants/report-fields.ts`:**
   - Standard Common Core Fields:
     - `FLD-COM-DATE`: Report Date (`DATE`, required)
@@ -93,6 +100,7 @@ CREATE TABLE IF NOT EXISTS excel_template_mappings (
     - `RPT-FENCE`: Section ID (`FLD-FNC-SECTION-ID`), Fence Type (`FLD-FNC-TYPE`), Physical Condition (`FLD-FNC-CONDITION`), Tension Level (`FLD-FNC-TENSION`), Notes (`FLD-FNC-NOTES`).
 
 ### 3.3 Persistence & Repository Layer
+
 - **`src/storage/database/repositories/excel-mapping-repository.ts`:**
   - `CELL_ADDRESS_REGEX = /^[A-Z]{1,3}[1-9][0-9]{0,6}$/`: Validates standard Excel coordinates (`A1` to `XFD1048576`).
   - `COLUMN_LETTER_REGEX = /^[A-Z]{1,3}$/`: Validates column letters (`A` to `XFD`).
@@ -102,6 +110,7 @@ CREATE TABLE IF NOT EXISTS excel_template_mappings (
   - `deleteMappings(templateId, versionId, worksheetName)`.
 
 ### 3.4 IPC Boundary & Client Layer
+
 - **IPC Handlers (`src/main/index.ts`):**
   - `templates:get-excel-mappings`: Queries existing mappings for template version sheet.
   - `templates:save-excel-mappings`: Validates and commits mapping configuration.
@@ -110,6 +119,7 @@ CREATE TABLE IF NOT EXISTS excel_template_mappings (
 - **Client Services (`src/renderer/services/template-client.ts`):** `ITemplateClient`, `ElectronTemplateClient`, and `InMemoryTemplateClient` updated with mapping support for UI and test execution.
 
 ### 3.5 UI Wizard Modal (`ExcelMappingWizardModal.tsx`)
+
 - Guided 5-stage progress indicator with breadcrumb navigation.
 - Stage 1: Active version indicator with cryptographic hash check and version switcher.
 - Stage 2: Worksheet selection dropdown, tab dimensions, bounded 15x10 read-only cell grid preview with formula tags and merged cell badges.
@@ -123,7 +133,9 @@ CREATE TABLE IF NOT EXISTS excel_template_mappings (
 ## 4. Verification & Testing
 
 ### 4.1 Automated Test Suite (`tests/unit/excel-mapping-wizard.test.ts`)
+
 Seven dedicated, end-to-end unit tests covering all Step 22 requirements:
+
 1. **MAP-01 (Version Selection & Integrity):** Inspects template versions, verifies SHA-256 fingerprint, and confirms matching active version metadata.
 2. **MAP-02 (Worksheet Enumeration & Bounded Preview):** Confirms Open XML worksheet extraction, tab switching, and bounded 15x10 cell grid inspection.
 3. **MAP-03 (Header Row Extraction & Column Disambiguation):** Extracts header row text and successfully differentiates duplicate column labels (`Status` in C vs `Status` in D) by physical column letters.
@@ -133,6 +145,7 @@ Seven dedicated, end-to-end unit tests covering all Step 22 requirements:
 7. **MAP-07 (Master Immutability Guarantee):** Measures cryptographic SHA-256 hash of physical vault master file before and after complete inspection, mapping, and database write operations; asserts 100% byte-for-byte identity.
 
 ### 4.2 Full Workspace Test Results
+
 - **Test Files Passed:** 30 / 30 (100%)
 - **Total Tests Passed:** 228 / 228 (100%)
 - **TypeScript Typecheck:** 0 errors across Node and Web targets.
@@ -145,11 +158,13 @@ Seven dedicated, end-to-end unit tests covering all Step 22 requirements:
 ## 5. Architectural Invariants & Scope Boundaries
 
 ### 5.1 Invariants Upheld
+
 - **`INV-DAT-006` (Master Template Immutability):** Vault master templates are strictly read-only. Cell mappings are stored exclusively in SQLite table `excel_template_mappings`. Master files are never modified on disk.
 - **`DIC-OPSREPORT-001` (Authoritative Field Compliance):** Only fields defined in the approved field dictionary can be mapped.
 - **Version Isolation:** Mappings are strictly bound to `(template_id, version_id, worksheet_name)`. Upgrading or replacing a template does not corrupt historical version mappings.
 
 ### 5.2 Strict Scope Boundaries Preserved
+
 - Word placeholder and table mapping wizard is deferred to Step 23.
 - Reusable mapping profiles across different templates are deferred to Step 24.
 - In-app visual template designer is deferred to Step 25.

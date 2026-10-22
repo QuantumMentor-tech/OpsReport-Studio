@@ -16,6 +16,7 @@ import os from 'node:os';
 export const APP_FOLDER_NAME = 'OpsReportStudio';
 export const TEMPLATES_SUBDIR = 'Templates';
 export const SCRATCH_SUBDIR = 'Scratch';
+export const WORKSPACE_SUBDIR = 'Workspace';
 export const REPORTS_SUBDIR = 'Reports';
 export const DATABASE_SUBDIR = 'Database';
 export const LOGS_SUBDIR = 'Logs';
@@ -57,6 +58,13 @@ export function resolveTemplatesDirectory(customRoot?: string): string {
  */
 export function resolveScratchDirectory(customRoot?: string): string {
   return path.join(resolveAppDataRoot(customRoot), SCRATCH_SUBDIR);
+}
+
+/**
+ * Resolves the canonical Generation Workspace directory path (%LOCALAPPDATA%\OpsReportStudio\Workspace).
+ */
+export function resolveWorkspaceDirectory(customRoot?: string): string {
+  return path.join(resolveAppDataRoot(customRoot), WORKSPACE_SUBDIR);
 }
 
 /**

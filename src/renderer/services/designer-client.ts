@@ -21,7 +21,7 @@ import type {
   CompileAndRegisterInput,
   CompileAndRegisterResult,
 } from '../../shared/types/template-designer.ts';
-import type { SerializableError } from '../../shared/types/errors.ts';
+import type { SerializableError } from '../../shared/errors/app-error.ts';
 import type { OpsReportBridgeAPI } from '../../shared/types/metadata.ts';
 import { Result, Ok, Err } from '../../shared/types/result.ts';
 import { ErrorCode } from '../../shared/errors/error-codes.ts';
@@ -51,9 +51,7 @@ export interface IDesignerClient {
     documentType?: DesignerDocumentType,
     categoryId?: string
   ): Promise<Result<DesignerDraftSummary[], SerializableError>>;
-  getDraft(
-    draftId: string
-  ): Promise<Result<DesignerDraftRecord | null, SerializableError>>;
+  getDraft(draftId: string): Promise<Result<DesignerDraftRecord | null, SerializableError>>;
   createDraft(
     input: CreateDesignerDraftInput
   ): Promise<Result<DesignerDraftRecord, SerializableError>>;
@@ -61,9 +59,7 @@ export interface IDesignerClient {
     draftId: string,
     input: UpdateDesignerDraftInput
   ): Promise<Result<DesignerDraftRecord, SerializableError>>;
-  deleteDraft(
-    draftId: string
-  ): Promise<Result<boolean, SerializableError>>;
+  deleteDraft(draftId: string): Promise<Result<boolean, SerializableError>>;
   validateDesign(
     definition: TemplateDesignDefinition,
     categoryId?: string
@@ -80,7 +76,9 @@ export class ElectronDesignerClient implements IDesignerClient {
   ): Promise<Result<DesignerDraftSummary[], SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.listDrafts(documentType, categoryId);
   }
@@ -90,7 +88,9 @@ export class ElectronDesignerClient implements IDesignerClient {
   ): Promise<Result<DesignerDraftRecord | null, SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.getDraft(draftId);
   }
@@ -100,7 +100,9 @@ export class ElectronDesignerClient implements IDesignerClient {
   ): Promise<Result<DesignerDraftRecord, SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.createDraft(input);
   }
@@ -111,17 +113,19 @@ export class ElectronDesignerClient implements IDesignerClient {
   ): Promise<Result<DesignerDraftRecord, SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.updateDraft(draftId, input);
   }
 
-  public async deleteDraft(
-    draftId: string
-  ): Promise<Result<boolean, SerializableError>> {
+  public async deleteDraft(draftId: string): Promise<Result<boolean, SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.deleteDraft(draftId);
   }
@@ -132,7 +136,9 @@ export class ElectronDesignerClient implements IDesignerClient {
   ): Promise<Result<DesignerValidationResult, SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.validateDesign(definition, categoryId);
   }
@@ -142,7 +148,9 @@ export class ElectronDesignerClient implements IDesignerClient {
   ): Promise<Result<CompileAndRegisterResult, SerializableError>> {
     const bridge = getOpsReportBridge();
     if (!bridge?.designer) {
-      return Err(makeError(ErrorCode.SYSTEM_CONFIG_INVALID, 'Designer IPC bridge not available.'));
+      return Err(
+        makeError(ErrorCode.IPC_COMMUNICATION_FAILED, 'Designer IPC bridge not available.')
+      );
     }
     return bridge.designer.compileAndRegister(input);
   }
@@ -214,8 +222,10 @@ export class InMemoryDesignerClient implements IDesignerClient {
     const updated: DesignerDraftRecord = {
       ...existing,
       name: input.name ?? existing.name,
-      description: input.description !== undefined ? (input.description ?? null) : existing.description,
-      category_id: input.categoryId !== undefined ? (input.categoryId ?? null) : existing.category_id,
+      description:
+        input.description !== undefined ? (input.description ?? null) : existing.description,
+      category_id:
+        input.categoryId !== undefined ? (input.categoryId ?? null) : existing.category_id,
       target_template_id:
         input.targetTemplateId !== undefined
           ? (input.targetTemplateId ?? null)
@@ -230,15 +240,13 @@ export class InMemoryDesignerClient implements IDesignerClient {
     return Ok(updated);
   }
 
-  public async deleteDraft(
-    draftId: string
-  ): Promise<Result<boolean, SerializableError>> {
+  public async deleteDraft(draftId: string): Promise<Result<boolean, SerializableError>> {
     const existed = this.drafts.delete(draftId);
     return Ok(existed);
   }
 
   public async validateDesign(
-    definition: TemplateDesignDefinition,
+    _definition: TemplateDesignDefinition,
     _categoryId?: string
   ): Promise<Result<DesignerValidationResult, SerializableError>> {
     return Ok({

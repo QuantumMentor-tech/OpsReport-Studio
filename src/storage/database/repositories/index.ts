@@ -13,3 +13,4 @@ export * from './excel-mapping-repository.ts';
 export * from './word-mapping-repository.ts';
 export * from './mapping-profile-repository.ts';
 export * from './template-designer-repository.ts';
+export * from './generation-workspace-repository.ts';

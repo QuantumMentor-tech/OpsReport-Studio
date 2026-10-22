@@ -40,8 +40,8 @@ import {
 } from '../../src/shared/types/template-designer.ts';
 import {
   toTemplateId,
-  toReportCategoryId,
   toTemplateVersionId,
+  toMappingProfileId,
 } from '../../src/shared/types/identifiers.ts';
 
 describe('In-App Excel & Word Template Designer (Step 25)', () => {
@@ -145,12 +145,14 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
     // 2. Retrieve Draft
     const getRes = designerRepo.getDraft(draftId);
     expect(getRes.ok).toBe(true);
+    if (!getRes.ok) return;
     expect(getRes.value?.draft_id).toBe(draftId);
     expect(getRes.value?.name).toBe('Draft Station Lighting');
 
     // 3. List Drafts
     const listRes = designerRepo.listDrafts('EXCEL_WORKBOOK', 'RPT-STATION-LIGHT');
     expect(listRes.ok).toBe(true);
+    if (!listRes.ok) return;
     expect(listRes.value).toHaveLength(1);
     expect(listRes.value[0].draftId).toBe(draftId);
     expect(listRes.value[0].categoryName).toBe('Station Light Reports');
@@ -161,16 +163,19 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
       description: 'Revised description',
     });
     expect(updateRes.ok).toBe(true);
+    if (!updateRes.ok) return;
     expect(updateRes.value.name).toBe('Updated Draft Station Lighting');
     expect(updateRes.value.description).toBe('Revised description');
 
     // 5. Delete Draft
     const delRes = designerRepo.deleteDraft(draftId);
     expect(delRes.ok).toBe(true);
+    if (!delRes.ok) return;
     expect(delRes.value).toBe(true);
 
     const postDel = designerRepo.getDraft(draftId);
     expect(postDel.ok).toBe(true);
+    if (!postDel.ok) return;
     expect(postDel.value).toBeNull();
   });
 
@@ -256,7 +261,11 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
           headerRowIndex: 3,
           columnWidths: { A: 15, B: 25, C: 15 },
           cells: [
-            { coordinate: 'A1', text: 'Station Inspection Log', style: { bold: true, fontSize: 14 } },
+            {
+              coordinate: 'A1',
+              text: 'Station Inspection Log',
+              style: { bold: true, fontSize: 14 },
+            },
             { coordinate: 'A3', text: 'Station ID', style: { bold: true } },
             { coordinate: 'B3', text: 'Luminaire Zone', style: { bold: true } },
             { coordinate: 'C3', text: 'Status', style: { bold: true } },
@@ -423,6 +432,7 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
     // 1. Verify template exists in metadata repository
     const tplRes = templateRepo.getTemplateById(toTemplateId(templateId));
     expect(tplRes.ok).toBe(true);
+    if (!tplRes.ok) return;
     expect(tplRes.value?.template_name).toBe('Custom Station Light Template');
     expect(tplRes.value?.category_id).toBe('RPT-STATION-LIGHT');
     expect(tplRes.value?.document_type).toBe('EXCEL_XLSX');
@@ -430,16 +440,18 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
     // 2. Verify physical master file exists in vault
     const filePathRes = vaultManager.resolveTemplateFileVaultPath(tplRes.value!.file_name!);
     expect(filePathRes.ok).toBe(true);
+    if (!filePathRes.ok) return;
     expect(fs.existsSync(filePathRes.value)).toBe(true);
 
     // 3. Verify mapping profile was created and has child mappings
-    const profileRes = mappingProfileRepo.getProfile(profileId!);
+    const profileRes = mappingProfileRepo.getProfile(toMappingProfileId(profileId!));
     expect(profileRes.ok).toBe(true);
     const mappingsRes = excelMappingRepo.getMappings(
       toTemplateId(templateId),
       toTemplateVersionId(versionId)
     );
     expect(mappingsRes.ok).toBe(true);
+    if (!mappingsRes.ok) return;
     expect(mappingsRes.value).toHaveLength(3);
 
     // 4. Verify template inspection parses the generated master file
@@ -448,6 +460,7 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
       worksheetName: 'AuditSheet',
     });
     expect(inspectRes.ok).toBe(true);
+    if (!inspectRes.ok) return;
     expect(inspectRes.value?.excelPreview?.sheets).toHaveLength(1);
     expect(inspectRes.value?.excelPreview?.sheets[0].name).toBe('AuditSheet');
   });
@@ -478,7 +491,7 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
     expect(v1Res.ok).toBe(true);
     if (!v1Res.ok) return;
 
-    const { templateId, versionId: v1VersionId } = v1Res.value;
+    const { templateId } = v1Res.value;
 
     const getVersionFilePath = (templateIdStr: string, versionNum: number): string => {
       const versionsRes = templateRepo.getVersionsByTemplateId(toTemplateId(templateIdStr));
@@ -577,11 +590,16 @@ describe('In-App Excel & Word Template Designer (Step 25)', () => {
     expect(initRes.ok).toBe(true);
     if (!initRes.ok) return;
 
-    const versionsRes = templateRepo.getVersionsByTemplateId(toTemplateId(initRes.value.templateId));
+    const versionsRes = templateRepo.getVersionsByTemplateId(
+      toTemplateId(initRes.value.templateId)
+    );
     expect(versionsRes.ok).toBe(true);
     if (!versionsRes.ok) return;
     const v1Record = versionsRes.value[0];
-    const masterPath = vaultManager.resolveTemplateFileVaultPath(v1Record.file_name).value;
+    const masterPathRes = vaultManager.resolveTemplateFileVaultPath(v1Record.file_name);
+    expect(masterPathRes.ok).toBe(true);
+    if (!masterPathRes.ok) return;
+    const masterPath = masterPathRes.value;
 
     const initialBytes = fs.readFileSync(masterPath);
     const initialHash = crypto.createHash('sha256').update(initialBytes).digest('hex');

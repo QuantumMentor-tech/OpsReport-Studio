@@ -34,6 +34,7 @@ import {
   resolveAppDataRoot,
   resolveTemplatesDirectory,
   resolveScratchDirectory,
+  resolveWorkspaceDirectory,
   resolveReportsDirectory,
   resolveDatabaseDirectory,
   resolveLogsDirectory,
@@ -61,6 +62,7 @@ export class VaultManager {
   public readonly appDataRoot: string;
   public readonly templatesDir: string;
   public readonly scratchDir: string;
+  public readonly workspaceDir: string;
   public readonly reportsDir: string;
   public readonly databaseDir: string;
   public readonly logsDir: string;
@@ -70,6 +72,7 @@ export class VaultManager {
     this.appDataRoot = resolveAppDataRoot(customRoot);
     this.templatesDir = resolveTemplatesDirectory(customRoot);
     this.scratchDir = resolveScratchDirectory(customRoot);
+    this.workspaceDir = resolveWorkspaceDirectory(customRoot);
     this.reportsDir = resolveReportsDirectory(customRoot);
     this.databaseDir = resolveDatabaseDirectory(customRoot);
     this.logsDir = resolveLogsDirectory(customRoot);
@@ -141,6 +144,7 @@ export class VaultManager {
     try {
       const templatesStatus = this.checkDirectoryStatus(this.templatesDir);
       const scratchStatus = this.checkDirectoryStatus(this.scratchDir);
+      const workspaceStatus = this.checkDirectoryStatus(this.workspaceDir);
       const reportsStatus = this.checkDirectoryStatus(this.reportsDir);
       const databaseStatus = this.checkDirectoryStatus(this.databaseDir);
 
@@ -163,6 +167,7 @@ export class VaultManager {
         appDataRoot: this.appDataRoot,
         templatesDir: templatesStatus,
         scratchDir: scratchStatus,
+        workspaceDir: workspaceStatus,
         reportsDir: reportsStatus,
         databaseDir: databaseStatus,
         totalTemplatesInVault: fileCount,
@@ -193,6 +198,7 @@ export class VaultManager {
         this.appDataRoot,
         this.templatesDir,
         this.scratchDir,
+        this.workspaceDir,
         this.reportsDir,
         this.databaseDir,
         this.logsDir,
@@ -405,6 +411,77 @@ export class VaultManager {
           code: ErrorCode.SECURITY_VIOLATION,
           userMessage: 'Failed to resolve scratch path safely.',
           isOperational: true,
+        })
+      );
+    }
+  }
+
+  /**
+   * Resolves a working file path within the Generation Workspace (%LOCALAPPDATA%\OpsReportStudio\Workspace\).
+   * Prevents directory traversal, verifies containment, and ensures path does not resolve into vault.
+   */
+  public resolveWorkspacePath(filenameOrPrefix: string): Result<string, AppError> {
+    try {
+      assertNoNullBytes(filenameOrPrefix);
+
+      if (
+        filenameOrPrefix.includes('..') ||
+        filenameOrPrefix.includes('/') ||
+        filenameOrPrefix.includes('\\')
+      ) {
+        return Err(
+          new AppError({
+            code: ErrorCode.SECURITY_VIOLATION,
+            userMessage:
+              'Invalid workspace filename: path separators and traversal sequences are prohibited.',
+            isOperational: true,
+          })
+        );
+      }
+
+      const resolved = path.join(this.workspaceDir, filenameOrPrefix);
+      assertPathInsideRoot(resolved, this.workspaceDir, 'Generation Workspace');
+      assertTargetNotInsideVault(resolved, this.templatesDir);
+
+      return Ok(resolved);
+    } catch (err) {
+      if (err instanceof AppError) {
+        return Err(err);
+      }
+      return Err(
+        new AppError({
+          code: ErrorCode.SECURITY_VIOLATION,
+          userMessage: 'Failed to resolve generation workspace path safely.',
+          isOperational: true,
+        })
+      );
+    }
+  }
+
+  /**
+   * Safely deletes a working file from the Generation Workspace.
+   * Only deletes files physically confirmed to reside inside Workspace/.
+   */
+  public deleteWorkspaceFile(fileName: string): Result<boolean, AppError> {
+    try {
+      const pathRes = this.resolveWorkspacePath(fileName);
+      if (!pathRes.ok) {
+        return pathRes;
+      }
+      const filePath = pathRes.value;
+      if (!fs.existsSync(filePath)) {
+        return Ok(false);
+      }
+      fs.unlinkSync(filePath);
+      return Ok(true);
+    } catch (err) {
+      return Err(
+        new AppError({
+          code: ErrorCode.FILE_ACCESS_DENIED,
+          userMessage: `Failed to remove workspace file "${fileName}".`,
+          details: { developerMessage: String(err) },
+          isOperational: true,
+          cause: err,
         })
       );
     }

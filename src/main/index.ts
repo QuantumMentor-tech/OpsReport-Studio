@@ -51,6 +51,11 @@ import {
   MappingValidationService,
   TemplateDesignerService,
 } from '../storage/vault/index.ts';
+import { GenerationWorkspaceRepository } from '../storage/database/repositories/generation-workspace-repository.ts';
+import {
+  ExcelWorkbookCloningService,
+  ExcelDataInjectionService,
+} from '../storage/generation/index.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +71,9 @@ let profileRepo: MappingProfileRepository | null = null;
 let validationService: MappingValidationService | null = null;
 let designerRepo: TemplateDesignerRepository | null = null;
 let designerService: TemplateDesignerService | null = null;
+let generationWorkspaceRepo: GenerationWorkspaceRepository | null = null;
+let excelCloningService: ExcelWorkbookCloningService | null = null;
+let excelInjectionService: ExcelDataInjectionService | null = null;
 let vaultManager: VaultManager | null = null;
 
 const APP_METADATA: AppMetadata = {
@@ -129,6 +137,23 @@ function initializePersistence(): void {
       excelMappingRepo,
       wordMappingRepo,
       designerRepo
+    );
+
+    generationWorkspaceRepo = new GenerationWorkspaceRepository(db, vaultManager);
+    excelCloningService = new ExcelWorkbookCloningService(
+      templateRepo,
+      vaultManager,
+      sessionRepo,
+      generationWorkspaceRepo
+    );
+    excelInjectionService = new ExcelDataInjectionService(
+      sessionRepo,
+      templateRepo,
+      generationWorkspaceRepo,
+      excelMappingRepo,
+      profileRepo,
+      vaultManager,
+      stationRepo
     );
   } catch (err) {
     console.error('[Main] Unexpected error initializing persistence:', err);
@@ -1087,21 +1112,18 @@ function setupIpcHandlers(): void {
   // ---------------------------------------------------------------------------
   // Template Designer IPC Handlers (Step 25)
   // ---------------------------------------------------------------------------
-  ipcMain.handle(
-    'designer:list-drafts',
-    (_event, documentType?: any, categoryId?: string) => {
-      if (!designerRepo) {
-        return {
-          ok: false,
-          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
-        };
-      }
-      const res = designerRepo.listDrafts(documentType, categoryId);
-      return res.ok
-        ? { ok: true, value: res.value }
-        : { ok: false, error: toSerializableError(res.error) };
+  ipcMain.handle('designer:list-drafts', (_event, documentType?: any, categoryId?: string) => {
+    if (!designerRepo) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Database not initialized.' },
+      };
     }
-  );
+    const res = designerRepo.listDrafts(documentType, categoryId);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
 
   ipcMain.handle('designer:get-draft', (_event, draftId: string) => {
     if (!designerRepo) {
@@ -1155,19 +1177,16 @@ function setupIpcHandlers(): void {
       : { ok: false, error: toSerializableError(res.error) };
   });
 
-  ipcMain.handle(
-    'designer:validate-design',
-    (_event, definition: any, categoryId?: string) => {
-      if (!designerService) {
-        return {
-          ok: false,
-          error: { code: 'PERSISTENCE_FAILED', userMessage: 'Designer service not initialized.' },
-        };
-      }
-      const res = designerService.validateDesign(definition, categoryId);
-      return { ok: true, value: res };
+  ipcMain.handle('designer:validate-design', (_event, definition: any, categoryId?: string) => {
+    if (!designerService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Designer service not initialized.' },
+      };
     }
-  );
+    const res = designerService.validateDesign(definition, categoryId);
+    return { ok: true, value: res };
+  });
 
   ipcMain.handle('designer:compile-and-register', async (_event, input: any) => {
     if (!designerService) {
@@ -1177,6 +1196,78 @@ function setupIpcHandlers(): void {
       };
     }
     const res = await designerService.compileAndRegister(input);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  // -------------------------------------------------------------------------
+  // Report Generation & Excel Workbook Cloning (Step 26)
+  // -------------------------------------------------------------------------
+
+  ipcMain.handle('generation:prepare-excel-workspace', (_event, options: any) => {
+    if (!excelCloningService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Generation service not initialized.' },
+      };
+    }
+    const res = excelCloningService.prepareExcelWorkspace(options);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('generation:get-workspace', (_event, workspaceId: string) => {
+    if (!excelCloningService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Generation service not initialized.' },
+      };
+    }
+    const res = excelCloningService.getWorkspace(workspaceId as any);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('generation:discard-workspace', (_event, workspaceId: string) => {
+    if (!excelCloningService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Generation service not initialized.' },
+      };
+    }
+    const res = excelCloningService.discardWorkspace(workspaceId as any);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('generation:get-active-workspace-for-session', (_event, sessionId: string) => {
+    if (!excelCloningService) {
+      return {
+        ok: false,
+        error: { code: 'PERSISTENCE_FAILED', userMessage: 'Generation service not initialized.' },
+      };
+    }
+    const res = excelCloningService.getActiveWorkspaceForSession(sessionId as any);
+    return res.ok
+      ? { ok: true, value: res.value }
+      : { ok: false, error: toSerializableError(res.error) };
+  });
+
+  ipcMain.handle('generation:inject-excel-data', (_event, options: any) => {
+    if (!excelInjectionService) {
+      return {
+        ok: false,
+        error: {
+          code: 'PERSISTENCE_FAILED',
+          userMessage: 'Generation injection service not initialized.',
+        },
+      };
+    }
+    const res = excelInjectionService.injectSessionData(options);
     return res.ok
       ? { ok: true, value: res.value }
       : { ok: false, error: toSerializableError(res.error) };

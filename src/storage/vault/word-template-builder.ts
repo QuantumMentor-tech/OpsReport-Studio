@@ -13,10 +13,7 @@
  */
 
 import PizZip from 'pizzip';
-import type {
-  WordDocumentDesign,
-  WordElementDesign,
-} from '../../shared/types/template-designer.ts';
+import type { WordDocumentDesign } from '../../shared/types/template-designer.ts';
 import { WORD_PLACEHOLDER_REGEX } from '../database/repositories/word-mapping-repository.ts';
 import { Result, Ok, Err } from '../../shared/types/result.ts';
 import { AppError } from '../../shared/errors/app-error.ts';
@@ -35,9 +32,7 @@ export class WordTemplateBuilder {
   /**
    * Compiles a WordDocumentDesign into an Open XML (.docx) ZIP buffer.
    */
-  public static buildDocument(
-    design: WordDocumentDesign
-  ): Result<Buffer, AppError> {
+  public static buildDocument(design: WordDocumentDesign): Result<Buffer, AppError> {
     try {
       if (!design.elements || design.elements.length === 0) {
         return Err(
@@ -161,10 +156,7 @@ export class WordTemplateBuilder {
       </w:r>
     </w:p>`;
         } else if (el.type === 'TABLE' && el.table) {
-          const maxCols = el.table.rows.reduce(
-            (max, r) => Math.max(max, r.cells.length),
-            1
-          );
+          const maxCols = el.table.rows.reduce((max, r) => Math.max(max, r.cells.length), 1);
 
           let gridXml = '<w:tblGrid>';
           for (let c = 0; c < maxCols; c++) {
@@ -330,7 +322,7 @@ export class WordTemplateBuilder {
     } catch (err) {
       return Err(
         new AppError({
-          code: ErrorCode.FILE_WRITE_ERROR,
+          code: ErrorCode.INTERNAL_UNEXPECTED,
           userMessage: 'Failed to compile Word document Open XML package.',
           details: { error: String(err) },
           cause: err,

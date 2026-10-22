@@ -28,6 +28,7 @@ export interface VaultStorageStatus {
   readonly scratchDir: StorageDirectoryStatus;
   readonly reportsDir: StorageDirectoryStatus;
   readonly databaseDir: StorageDirectoryStatus;
+  readonly workspaceDir?: StorageDirectoryStatus;
   readonly totalTemplatesInVault: number;
   readonly statusMessage: string;
 }

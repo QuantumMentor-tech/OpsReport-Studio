@@ -12,10 +12,6 @@
  * @module shared/types/template-designer
  */
 
-import type { ReportDocumentFormat } from './categories.ts';
-import type { ExcelMappingTargetType } from './excel-mapping.ts';
-import type { WordMappingTargetType } from './word-mapping.ts';
-
 export const CURRENT_DESIGN_SCHEMA_VERSION = 1;
 
 export type DesignerDocumentType = 'EXCEL_WORKBOOK' | 'WORD_DOCUMENT';

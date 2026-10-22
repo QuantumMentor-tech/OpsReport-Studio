@@ -24,15 +24,11 @@ import type {
   ExcelCellDesign,
   WordDocumentDesign,
   WordElementDesign,
-  DesignerValidationResult,
   DesignerDraftSummary,
 } from '../../../shared/types/template-designer.ts';
 import type { ReportCategoryRecord } from '../../../shared/types/categories.ts';
 import type { TemplateMetadataRecord } from '../../../shared/types/templates.ts';
-import {
-  createDesignerClient,
-  IDesignerClient,
-} from '../../services/designer-client.ts';
+import { createDesignerClient, IDesignerClient } from '../../services/designer-client.ts';
 import {
   getApprovedFieldsForCategory,
   COMMON_REPORT_FIELDS,
@@ -78,9 +74,17 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
       name: 'InspectionData',
       headerRowIndex: 4,
       cells: [
-        { coordinate: 'A1', text: 'Facility Inspection Report', style: { bold: true, fontSize: 14 } },
+        {
+          coordinate: 'A1',
+          text: 'Facility Inspection Report',
+          style: { bold: true, fontSize: 14 },
+        },
         { coordinate: 'A2', text: 'Report Date:', style: { bold: true } },
-        { coordinate: 'B2', text: '', fieldSlot: { fieldId: 'FLD-COM-DATE', fieldLabel: 'Report Date' } },
+        {
+          coordinate: 'B2',
+          text: '',
+          fieldSlot: { fieldId: 'FLD-COM-DATE', fieldLabel: 'Report Date' },
+        },
         { coordinate: 'A4', text: 'Station ID', style: { bold: true } },
         { coordinate: 'B4', text: 'Status', style: { bold: true } },
       ],
@@ -159,10 +163,12 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
   ]);
 
   // Validation & Build State
-  const [validationResult, setValidationResult] = useState<DesignerValidationResult | null>(null);
   const [isBuilding, setIsBuilding] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{
+    text: string;
+    type: 'success' | 'error' | 'info';
+  } | null>(null);
 
   // Set default category on open
   useEffect(() => {
@@ -190,7 +196,7 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
   // Determine available fields based on selected category
   const availableFields: ReportFieldDefinition[] = selectedCategoryId
     ? getApprovedFieldsForCategory(selectedCategoryId)
-    : COMMON_REPORT_FIELDS as ReportFieldDefinition[];
+    : (COMMON_REPORT_FIELDS as ReportFieldDefinition[]);
 
   // Construct current design definition
   const getCurrentDesignDefinition = (): TemplateDesignDefinition => {
@@ -217,12 +223,12 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
     const def = getCurrentDesignDefinition();
     const res = await client.validateDesign(def, selectedCategoryId);
     if (res.ok) {
-      setValidationResult(res.value);
       if (res.value.isValid) {
         setStatusMessage({ text: 'Design passed validation with 0 errors.', type: 'success' });
       } else {
+        const firstErr = res.value.diagnostics.find(d => d.severity === 'ERROR');
         setStatusMessage({
-          text: `Design has ${res.value.errorCount} error(s) that must be resolved.`,
+          text: `Design has ${res.value.errorCount} error(s): ${firstErr?.message ?? 'Validation failed.'}`,
           type: 'error',
         });
       }
@@ -262,7 +268,10 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
         });
         if (res.ok) {
           setDraftId(res.value.draft_id);
-          setStatusMessage({ text: 'Design draft created and saved successfully.', type: 'success' });
+          setStatusMessage({
+            text: 'Design draft created and saved successfully.',
+            type: 'success',
+          });
           loadSavedDrafts();
         } else {
           setStatusMessage({ text: res.error.userMessage, type: 'error' });
@@ -510,8 +519,7 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                 borderRadius: '6px',
                 fontSize: '12px',
                 fontWeight: 600,
-                backgroundColor:
-                  documentType === 'EXCEL_WORKBOOK' ? '#166534' : '#1e40af',
+                backgroundColor: documentType === 'EXCEL_WORKBOOK' ? '#166534' : '#1e40af',
                 color: '#fff',
               }}
             >
@@ -624,15 +632,20 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                 statusMessage.type === 'success'
                   ? '#064e3b'
                   : statusMessage.type === 'error'
-                  ? '#7f1d1d'
-                  : '#1e3a8a',
+                    ? '#7f1d1d'
+                    : '#1e3a8a',
               color: '#fff',
             }}
           >
             <span>{statusMessage.text}</span>
             <button
               onClick={() => setStatusMessage(null)}
-              style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#fff',
+                cursor: 'pointer',
+              }}
             >
               ✕
             </button>
@@ -655,12 +668,21 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
             }}
           >
             <div>
-              <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#38bdf8' }}>
+              <h3
+                style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#38bdf8' }}
+              >
                 1. Template Identity & Context
               </h3>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <div>
-                  <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  <label
+                    style={{
+                      fontSize: '12px',
+                      color: '#94a3b8',
+                      display: 'block',
+                      marginBottom: '4px',
+                    }}
+                  >
                     Template Display Name:
                   </label>
                   <input
@@ -680,7 +702,14 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  <label
+                    style={{
+                      fontSize: '12px',
+                      color: '#94a3b8',
+                      display: 'block',
+                      marginBottom: '4px',
+                    }}
+                  >
                     Document Format:
                   </label>
                   <div style={{ display: 'flex', gap: '8px' }}>
@@ -724,7 +753,14 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  <label
+                    style={{
+                      fontSize: '12px',
+                      color: '#94a3b8',
+                      display: 'block',
+                      marginBottom: '4px',
+                    }}
+                  >
                     Operational Category:
                   </label>
                   <select
@@ -749,11 +785,26 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                 </div>
 
                 <div>
-                  <label style={{ fontSize: '12px', color: '#94a3b8', display: 'block', marginBottom: '4px' }}>
+                  <label
+                    style={{
+                      fontSize: '12px',
+                      color: '#94a3b8',
+                      display: 'block',
+                      marginBottom: '4px',
+                    }}
+                  >
                     Registration Target:
                   </label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <label
+                      style={{
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                      }}
+                    >
                       <input
                         type="radio"
                         name="regMode"
@@ -765,7 +816,15 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                       />
                       Register as New Logical Template (v1)
                     </label>
-                    <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                    <label
+                      style={{
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                      }}
+                    >
                       <input
                         type="radio"
                         name="regMode"
@@ -793,7 +852,7 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                       <option value="">-- Select Target Template --</option>
                       {templates.map(t => (
                         <option key={t.template_id} value={t.template_id}>
-                          {t.name} ({t.document_type})
+                          {t.template_name} ({t.document_type})
                         </option>
                       ))}
                     </select>
@@ -805,7 +864,14 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
             {/* Element Controls for Document Format */}
             {documentType === 'EXCEL_WORKBOOK' ? (
               <div>
-                <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#38bdf8' }}>
+                <h3
+                  style={{
+                    margin: '12px 0 8px 0',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#38bdf8',
+                  }}
+                >
                   2. Add / Edit Excel Cell
                 </h3>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -829,7 +895,9 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                       />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: '11px', color: '#94a3b8' }}>Static Text / Label:</label>
+                      <label style={{ fontSize: '11px', color: '#94a3b8' }}>
+                        Static Text / Label:
+                      </label>
                       <input
                         type="text"
                         value={cellText}
@@ -849,7 +917,9 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                   </div>
 
                   <div>
-                    <label style={{ fontSize: '11px', color: '#94a3b8' }}>Bind Field Slot (DIC-OPSREPORT-001):</label>
+                    <label style={{ fontSize: '11px', color: '#94a3b8' }}>
+                      Bind Field Slot (DIC-OPSREPORT-001):
+                    </label>
                     <select
                       value={cellFieldId}
                       onChange={e => setCellFieldId(e.target.value)}
@@ -872,8 +942,23 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                     </select>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '4px' }}>
-                    <label style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      marginTop: '4px',
+                    }}
+                  >
+                    <label
+                      style={{
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        cursor: 'pointer',
+                      }}
+                    >
                       <input
                         type="checkbox"
                         checked={cellBold}
@@ -902,7 +987,14 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
               </div>
             ) : (
               <div>
-                <h3 style={{ margin: '12px 0 8px 0', fontSize: '14px', fontWeight: 600, color: '#38bdf8' }}>
+                <h3
+                  style={{
+                    margin: '12px 0 8px 0',
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: '#38bdf8',
+                  }}
+                >
                   2. Add Word Document Blocks
                 </h3>
                 <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -1036,7 +1128,13 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                       padding: '16px',
                     }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginBottom: '12px',
+                      }}
+                    >
                       <h4 style={{ margin: 0, fontSize: '14px', color: '#f1f5f9' }}>
                         Sheet: {currentSheet?.name}
                       </h4>
@@ -1046,7 +1144,14 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                     </div>
 
                     {currentSheet?.cells.length === 0 ? (
-                      <div style={{ padding: '30px', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                      <div
+                        style={{
+                          padding: '30px',
+                          textAlign: 'center',
+                          color: '#64748b',
+                          fontSize: '13px',
+                        }}
+                      >
                         No cells defined in this sheet. Use the left panel to insert cells.
                       </div>
                     ) : (
@@ -1059,11 +1164,20 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                         }}
                       >
                         <thead>
-                          <tr style={{ backgroundColor: '#0f172a', borderBottom: '1px solid #334155' }}>
-                            <th style={{ padding: '8px', textAlign: 'left', width: '80px' }}>Coord</th>
+                          <tr
+                            style={{
+                              backgroundColor: '#0f172a',
+                              borderBottom: '1px solid #334155',
+                            }}
+                          >
+                            <th style={{ padding: '8px', textAlign: 'left', width: '80px' }}>
+                              Coord
+                            </th>
                             <th style={{ padding: '8px', textAlign: 'left' }}>Text / Value</th>
                             <th style={{ padding: '8px', textAlign: 'left' }}>Field Slot</th>
-                            <th style={{ padding: '8px', textAlign: 'center', width: '60px' }}>Action</th>
+                            <th style={{ padding: '8px', textAlign: 'center', width: '60px' }}>
+                              Action
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1155,21 +1269,36 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                       >
                         <button
                           onClick={() => handleMoveWordElement(idx, 'UP')}
-                          style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#fff',
+                            cursor: 'pointer',
+                          }}
                           title="Move up"
                         >
                           ▲
                         </button>
                         <button
                           onClick={() => handleMoveWordElement(idx, 'DOWN')}
-                          style={{ background: 'transparent', border: 'none', color: '#fff', cursor: 'pointer' }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#fff',
+                            cursor: 'pointer',
+                          }}
                           title="Move down"
                         >
                           ▼
                         </button>
                         <button
                           onClick={() => handleRemoveWordElement(idx)}
-                          style={{ background: 'transparent', border: 'none', color: '#f87171', cursor: 'pointer' }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#f87171',
+                            cursor: 'pointer',
+                          }}
                           title="Delete element"
                         >
                           ✕
@@ -1181,7 +1310,12 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                           style={{
                             margin: 0,
                             textAlign: el.heading.alignment || 'left',
-                            fontSize: el.heading.level === 1 ? '22px' : el.heading.level === 2 ? '18px' : '15px',
+                            fontSize:
+                              el.heading.level === 1
+                                ? '22px'
+                                : el.heading.level === 2
+                                  ? '18px'
+                                  : '15px',
                             color: '#0f172a',
                           }}
                         >
@@ -1300,17 +1434,31 @@ export const TemplateDesignerModal: React.FC<TemplateDesignerModalProps> = ({
                 backgroundColor: '#0f172a',
               }}
             >
-              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>Saved Designer Drafts</h4>
+              <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 600 }}>
+                Saved Designer Drafts
+              </h4>
               <button
                 onClick={() => setShowDraftsList(false)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer' }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#94a3b8',
+                  cursor: 'pointer',
+                }}
               >
                 ✕
               </button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
               {savedDrafts.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#64748b', fontSize: '12px' }}>
+                <div
+                  style={{
+                    padding: '20px',
+                    textAlign: 'center',
+                    color: '#64748b',
+                    fontSize: '12px',
+                  }}
+                >
                   No saved drafts found.
                 </div>
               ) : (

@@ -39,6 +39,9 @@ export type GenerationOperationId = Brand<string, 'GenerationOperationId'>;
 /** Identifier for a generated report output file artifact */
 export type GeneratedArtifactId = Brand<string, 'GeneratedArtifactId'>;
 
+/** Unique identifier for an isolated report generation workspace */
+export type GenerationWorkspaceId = Brand<string, 'GenerationWorkspaceId'>;
+
 // ---------------------------------------------------------------------------
 // Type-safe Constructor / Cast Helpers
 // ---------------------------------------------------------------------------
@@ -67,3 +70,7 @@ export const toGenerationOperationId = (id: string): GenerationOperationId =>
 
 /** Safely cast a validated string into a GeneratedArtifactId */
 export const toGeneratedArtifactId = (id: string): GeneratedArtifactId => id as GeneratedArtifactId;
+
+/** Safely cast a validated string into a GenerationWorkspaceId */
+export const toGenerationWorkspaceId = (id: string): GenerationWorkspaceId =>
+  id as GenerationWorkspaceId;
